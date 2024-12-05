@@ -145,7 +145,7 @@ async function saveCache(store, items) {
 }
 
 // 새로운 테스트 함수
-export const Handler = async () => {
+export const handler = async () => {
   try {
     console.log('=== 테스트 함수 시작 ===');
     
