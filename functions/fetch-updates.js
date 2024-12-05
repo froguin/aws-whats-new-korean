@@ -269,13 +269,17 @@ export const handler = async () => {
     await saveCache(store, uniqueItems);
 
     // 캐시된 아이템을 핸들러에서 반환
+    console.log('캐시된 아이템을 가져오는 중...'); // 완료 표시
+    const cachedData = await store.get(CACHE_KEY);
+    const lastUpdated = cachedData ? JSON.parse(cachedData).timestamp : '정보 없음'; // 캐시 타임스탬프 가져오기
+
     return {
       statusCode: 200,
       body: JSON.stringify({
         items: uniqueItems,
         meta: {
           isCached: true,
-          lastUpdated: (await store.get(CACHE_KEY)).timestamp, // 캐시 타임스탬프를 직접 사용
+          lastUpdated: lastUpdated, // 캐시 타임스탬프를 직접 사용
           itemCount: uniqueItems.length,
         },
       }),
