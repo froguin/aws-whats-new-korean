@@ -269,7 +269,7 @@ export const handler = async () => {
     console.log('일주일 이내 항목 수:', recentItems.length);
 
     const processedItems = [];
-    const chunkSize = 12; // 한 번에 처리할 항목 수
+    const chunkSize = 6; // 한 번에 처리할 항목 수
 
     // recentItems를 chunkSize만큼 나누기
     for (let i = 0; i < recentItems.length; i += chunkSize) {
