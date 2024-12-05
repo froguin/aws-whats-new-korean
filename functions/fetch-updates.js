@@ -202,10 +202,9 @@ export const handler = async () => {
       siteID: process.env.NETLIFY_SITE_ID,
       token: process.env.NETLIFY_ACCESS_TOKEN
     });
-
     // 캐시에서 기존 데이터 가져오기
-    const cachedData = await store.get(CACHE_KEY);
-    const processedItems = cachedData ? JSON.parse(cachedData).items : [];
+    let cachedData = await store.get(CACHE_KEY);
+    let processedItems = cachedData ? JSON.parse(cachedData).items : [];
     console.log(`가져온 아이템 수: ${processedItems.length}`);
 
     // 기존 아이템 Set 생성
@@ -273,8 +272,7 @@ export const handler = async () => {
 
     // 캐시된 아이템을 핸들러에서 반환
     console.log('캐시된 아이템을 가져오는 중...'); // 완료 표시
-    const cachedData = await store.get(CACHE_KEY);
-    const lastUpdated = cachedData ? JSON.parse(cachedData).timestamp : '정보 없음'; // 캐시 타임스탬프 가져오기
+    const lastUpdated = await store.get(CACHE_KEY) ? JSON.parse(await store.get(CACHE_KEY)).timestamp : '정보 없음'; // 캐시 타임스탬프 가져오기
 
     return {
       statusCode: 200,
