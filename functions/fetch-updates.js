@@ -224,7 +224,6 @@ export const handler = async () => {
 
     // RSS 피드 가져오기 및 필터링
     const rss = await parse(RSS_URL);
-    console.log('RSS 데이터:', rss); // RSS 데이터 구조 확인
     console.log('전체 RSS 항목 수:', rss.items.length);
     const recentItems = filterRecentItems(rss.items);
     console.log('일주일 이내 항목 수:', recentItems.length);
@@ -242,9 +241,18 @@ export const handler = async () => {
     if (updateCount > 0) {
       let processedCount = 0;
       for (const item of recentItems) {
-        if (await processItem(item, processedItems, existingItemsSet)) {
-          processedCount++;
-          if (processedCount >= MAX_ITEMS_TO_PROCESS) break;
+        if (processedCount >= MAX_ITEMS_TO_PROCESS) {
+          console.log(`최대 처리 아이템 수(${MAX_ITEMS_TO_PROCESS})에 도달했습니다. 더 이상 처리하지 않습니다.`);
+          break; // 최대 처리 수에 도달하면 루프 종료
+        }
+
+        const processedItem = await processItem(item, existingItemsSet);
+        if (processedItem) {
+          // 캐시된 아이템을 기반으로 새로운 아이템 생성
+          processedItems.unshift(processedItem);
+          await saveCache(store, processedItems);
+          console.log('캐시 저장 완료:', processedItem.title);
+          processedCount++; // 처리된 아이템 수 증가
         }
       }
 
