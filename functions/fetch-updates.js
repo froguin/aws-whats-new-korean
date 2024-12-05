@@ -230,36 +230,11 @@ export const handler = async () => {
       token: process.env.NETLIFY_ACCESS_TOKEN
     });
 
-    // 캐시된 데이터 확인
+    // 캐시에서 기존 데이터 가져오기
     const cachedData = await store.get(CACHE_KEY);
-    if (cachedData) {
-      const parsedData = JSON.parse(cachedData);
-      const cacheAge = Date.now() - new Date(parsedData.timestamp).getTime();
-    
-      if (cacheAge < CACHE_TTL * 1000) {
-        console.log('유효한 캐시된 데이터 반환');
-        return {
-          statusCode: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-          },
-          body: JSON.stringify({
-            items: parsedData.items,
-            meta: {
-              isCached: true,
-              lastUpdated: parsedData.timestamp,
-              itemCount: parsedData.items.length
-            }
-          })
-        };
-      } else {
-        console.log('캐시 만료, 새로운 데이터 가져오기');
-        await store.delete(CACHE_KEY);
-      }
-    }
+    const processedItems = cachedData ? JSON.parse(cachedData).items : [];
 
-    // RSS 피드 가져오기 및 처리
+    // RSS 피드 가져오기
     const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
     console.log('전체 RSS 항목 수:', rss.items.length);
 
@@ -268,45 +243,57 @@ export const handler = async () => {
     const recentItems = rss.items.filter(item => new Date(item.published) >= oneWeekAgo);
     console.log('일주일 이내 항목 수:', recentItems.length);
 
-    const processedItems = [];
-    const chunkSize = 6; // 한 번에 처리할 항목 수
+    // 기존 아이템과 새로 추가된 아이템을 비교하여 invoke 처리
+    const existingTitles = new Set(processedItems.map(item => item.title));
+    for (const item of recentItems) {
+      if (!existingTitles.has(item.title)) {
+        try {
+          console.log('처리 시작:', item.title.substring(0, 30) + '...');
+          const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
+          console.log('처리 완료:', item.title.substring(0, 30) + '...');
 
-    // recentItems를 chunkSize만큼 나누기
-    for (let i = 0; i < recentItems.length; i += chunkSize) {
-      const chunk = recentItems.slice(i, i + chunkSize);
-      const promises = chunk.map(async (item) => {
-        console.log('처리 시작:', item.title.substring(0, 30) + '...');
-        const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
-        console.log('처리 완료:', item.title.substring(0, 30) + '...');
-        
-        return {
-          title: summaryResponse.title,
-          date: new Date(item.published).toLocaleDateString('ko-KR', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-          }),
-          content: summaryResponse.summary,
-          target: summaryResponse.target || "모든 AWS 사용자",
-          features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
-          regions: summaryResponse.regions || "지원 리전 정보 없음",
-          status: summaryResponse.status || "일반 공개",
-          originalLink: item.link || ''
-        };
-      });
+          // 새로운 아이템을 맨 앞에 추가
+          processedItems.unshift({
+            title: summaryResponse.title,
+            date: new Date(item.published).toLocaleDateString('ko-KR', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            }),
+            content: summaryResponse.summary,
+            target: summaryResponse.target || "모든 AWS 사용자",
+            features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
+            regions: summaryResponse.regions || "지원 리전 정보 없음",
+            status: summaryResponse.status || "일반 공개",
+            originalLink: item.link || ''
+          });
 
-      // 모든 요청이 완료될 때까지 대기
-      const results = await Promise.all(promises);
-      processedItems.push(...results);
+          // 캐시 저장
+          const cacheData = {
+            timestamp: new Date().toISOString(),
+            items: processedItems
+          };
+          await store.set(CACHE_KEY, JSON.stringify(cacheData), { ttl: CACHE_TTL });
+        } catch (error) {
+          console.error('아이템 처리 중 오류:', error);
+          // 오류 발생 시에도 현재 캐시된 데이터 반환
+        }
+      }
     }
 
-    // 새로운 데이터 캐시 저장
-    const cacheData = {
+    // 캐시에서 7일이 지난 아이템 삭제
+    const currentTime = Date.now();
+    const filteredItems = processedItems.filter(item => {
+      const itemTime = new Date(item.date).getTime();
+      return (currentTime - itemTime) < (7 * 24 * 60 * 60 * 1000); // 7일 기준
+    });
+
+    // 최종 캐시 저장
+    const finalCacheData = {
       timestamp: new Date().toISOString(),
-      items: processedItems
+      items: filteredItems
     };
-    await store.set(CACHE_KEY, JSON.stringify(cacheData), { ttl: CACHE_TTL });
-    console.log('새로운 데이터 캐시 저장 완료');
+    await store.set(CACHE_KEY, JSON.stringify(finalCacheData), { ttl: CACHE_TTL });
 
     console.log('=== Function completed ===');
     return {
@@ -316,11 +303,11 @@ export const handler = async () => {
         'Access-Control-Allow-Origin': '*'
       },
       body: JSON.stringify({
-        items: processedItems,
+        items: filteredItems,
         meta: {
-          isCached: false,
-          lastUpdated: cacheData.timestamp,
-          itemCount: processedItems.length
+          isCached: true,
+          lastUpdated: finalCacheData.timestamp,
+          itemCount: filteredItems.length
         }
       })
     };
