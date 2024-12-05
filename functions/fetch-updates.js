@@ -225,8 +225,6 @@ export const handler = async () => {
 
     console.log(`업데이트가 필요한 항목 수: ${newItems.length}`);
 
-    let cacheTimestamp; // 캐시 타임스탬프 변수
-
     if (newItems.length > 0) {
       let processedCount = 0;
 
@@ -244,9 +242,8 @@ export const handler = async () => {
           existingItems.unshift(newItem); // 신규 아이템을 첫 번째로 추가
 
           // 캐시 데이터 저장
-          cacheTimestamp = new Date().toISOString(); // 캐시 타임스탬프 저장
           await store.set(CACHE_KEY, JSON.stringify({
-            timestamp: cacheTimestamp,
+            timestamp: new Date().toISOString(),
             items: existingItems // 최종 아이템 저장
           }));
         }
@@ -278,7 +275,7 @@ export const handler = async () => {
         items: uniqueItems,
         meta: {
           isCached: true,
-          lastUpdated: uniqueItems[0].timestamp, // 캐시 타임스탬프 사용
+          lastUpdated: (await store.get(CACHE_KEY)).timestamp, // 캐시 타임스탬프를 직접 사용
           itemCount: uniqueItems.length,
         },
       }),
