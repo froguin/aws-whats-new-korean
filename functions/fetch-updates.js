@@ -187,6 +187,13 @@ async function processItem(item, processedItems, existingItemsSet) {
   }
 }
 
+// 최근 아이템 필터링 함수
+function filterRecentItems(rssItems) {
+  const anAgo = new Date();
+  anAgo.setDate(anAgo.getDate() - CACHE_TTL_DAY);
+  return rssItems.filter(item => new Date(item.published) >= anAgo);
+}
+
 export const handler = async () => {
   try {
     console.log('=== Function started ===');
@@ -215,14 +222,11 @@ export const handler = async () => {
     const existingItemsSet = new Set(processedItems.map(item => `${item.guid}|${item.pubDate}`));
     console.log('기존 아이템 Set:', existingItemsSet);
 
-    // RSS 피드 가져오기
+    // RSS 피드 가져오기 및 필터링
     const rss = await parse(RSS_URL);
+    console.log('RSS 데이터:', rss); // RSS 데이터 구조 확인
     console.log('전체 RSS 항목 수:', rss.items.length);
-
-    // 최근 아이템 필터링 로직을 handler 내로 이동
-    const anAgo = new Date();
-    anAgo.setDate(anAgo.getDate() - CACHE_TTL_DAY);
-    const recentItems = rss.items.filter(item => new Date(item.published) >= anAgo);
+    const recentItems = filterRecentItems(rss.items);
     console.log('일주일 이내 항목 수:', recentItems.length);
 
     let updateCount = 0;
