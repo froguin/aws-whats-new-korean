@@ -9,7 +9,6 @@ export const handler = async () => {
     });
 
     await store.delete('aws-updates-v2');
-    await store.delete('aws-updates-undefined');
   
     return {
       statusCode: 200,

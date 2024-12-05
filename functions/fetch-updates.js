@@ -234,44 +234,6 @@ export const handler = async () => {
     const cachedData = await store.get(CACHE_KEY);
     const processedItems = cachedData ? JSON.parse(cachedData).items : [];
 
-    // 캐시된 데이터 반환
-    const response = {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      },
-      body: JSON.stringify({
-        items: processedItems,
-        meta: {
-          isCached: true,
-          lastUpdated: cachedData ? JSON.parse(cachedData).timestamp : null,
-          itemCount: processedItems.length
-        }
-      })
-    };
-
-    // 비동기로 추가 아이템 처리
-    processNewItems(store, processedItems);
-
-    return response;
-  } catch (error) {
-    console.error('Function error:', error.message);
-    console.error('Error stack:', error.stack);
-    
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ 
-        error: '서버 오류가 발생했습니다',
-        details: error.message 
-      })
-    };
-  }
-};
-
-// 비동기로 새로운 아이템 처리하는 함수
-async function processNewItems(store, processedItems) {
-  try {
     // RSS 피드 가져오기
     const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
     console.log('전체 RSS 항목 수:', rss.items.length);
@@ -284,48 +246,71 @@ async function processNewItems(store, processedItems) {
     // 기존 아이템의 guid와 pubDate를 Set으로 저장
     const existingItemsSet = new Set(processedItems.map(item => `${item.guid}|${item.pubDate}`));
 
-    // 최근 아이템을 하나씩 처리
+    // 업데이트가 필요한 항목 수
+    let updateCount = 0;
+
+    // 업데이트가 필요한 항목 수 세기
     for (const item of recentItems) {
       const itemGuid = item.guid; // RSS 피드에서 guid 가져오기
       const itemPubDate = new Date(item.published).toISOString(); // pubDate를 ISO 문자열로 변환
 
       // 기존 아이템과 비교하여 새로운 아이템인지 확인
       if (!existingItemsSet.has(`${itemGuid}|${itemPubDate}`)) {
-        try {
-          console.log('처리 시작:', item.title.substring(0, 30) + '...');
-          const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
-          console.log('처리 완료:', item.title.substring(0, 30) + '...');
+        updateCount++; // 업데이트가 필요한 항목 수 증가
+      }
+    }
 
-          // 새로운 아이템을 맨 앞에 추가
-          processedItems.unshift({
-            title: summaryResponse.title,
-            date: new Date(item.published).toLocaleDateString('ko-KR', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            }),
-            content: summaryResponse.summary,
-            target: summaryResponse.target || "모든 AWS 사용자",
-            features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
-            regions: summaryResponse.regions || "지원 리전 정보 없음",
-            status: summaryResponse.status || "일반 공개",
-            originalLink: item.link || '',
-            guid: itemGuid, // guid 추가
-            pubDate: itemPubDate // pubDate를 ISO 문자열로 저장
-          });
+    console.log(`업데이트가 필요한 항목 수: ${updateCount}`);
 
-          // 캐시 저장
-          const cacheData = {
-            timestamp: new Date().toISOString(),
-            items: processedItems
-          };
-          await store.set(CACHE_KEY, JSON.stringify(cacheData), { ttl: CACHE_TTL });
-        } catch (error) {
-          console.error('아이템 처리 중 오류:', error);
-          // 오류 발생 시에도 현재 캐시된 데이터 반환
+    // 업데이트가 필요한 항목만 처리
+    if (updateCount > 0) {
+      for (const item of recentItems) {
+        const itemGuid = item.guid; // RSS 피드에서 guid 가져오기
+        const itemPubDate = new Date(item.published).toISOString(); // pubDate를 ISO 문자열로 변환
+
+        // 기존 아이템과 비교하여 새로운 아이템인지 확인
+        if (!existingItemsSet.has(`${itemGuid}|${itemPubDate}`)) {
+          try {
+            console.log('처리 시작:', item.title.substring(0, 30) + '...');
+            const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
+            console.log('처리 완료:', item.title.substring(0, 30) + '...');
+
+            // 새로운 아이템을 맨 앞에 추가
+            processedItems.unshift({
+              title: summaryResponse.title,
+              date: new Date(item.published).toLocaleDateString('ko-KR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              }),
+              content: summaryResponse.summary,
+              target: summaryResponse.target || "모든 AWS 사용자",
+              features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
+              regions: summaryResponse.regions || "지원 리전 정보 없음",
+              status: summaryResponse.status || "일반 공개",
+              originalLink: item.link || '',
+              guid: itemGuid, // guid 추가
+              pubDate: itemPubDate // pubDate를 ISO 문자열로 저장
+            });
+
+            // 캐시 저장
+            const cacheData = {
+              timestamp: new Date().toISOString(),
+              items: processedItems
+            };
+            await store.set(CACHE_KEY, JSON.stringify(cacheData), { ttl: CACHE_TTL });
+          } catch (error) {
+            console.error('아이템 처리 중 오류:', error);
+            // 오류 발생 시에도 현재 캐시된 데이터 반환
+          }
+        } else {
+          console.log(`기존 아이템 ${itemGuid}는 이미 처리되었습니다.`);
         }
       }
     }
+
+    // 캐시에서 pubDate 기준으로 내림차순 정렬
+    processedItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
     // 캐시에서 7일이 지난 아이템 삭제
     const currentTime = Date.now();
