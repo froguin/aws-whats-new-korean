@@ -262,11 +262,14 @@ export const handler = async () => {
     const uniqueItems = Array.from(new Set(filteredItems.map(item => `${item.id}|${item.pubDate}`)))
       .map(id => filteredItems.find(item => `${item.id}|${item.pubDate}` === id));
 
-    // pubDate 기준으로 최신 정보가 맨 앞에 오도록 정렬
+      // pubDate 기준으로 최신 정보가 맨 앞에 오도록 정렬
     uniqueItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
-    // 정리한 내용을 캐시에 저장
-    await saveCache(store, uniqueItems);
+    // 캐시 정리 및 저장 조건: filteredItems와 processedItems의 카운트가 다르거나 filteredItems에 중복이 있을 경우
+    if (uniqueItems.length !== filteredItems.length || uniqueItems.length !== processedItems.length) {
+      // 정리한 내용을 캐시에 저장
+      await saveCache(store, uniqueItems);
+    }
 
     // 캐시된 아이템을 핸들러에서 반환
     console.log('캐시된 아이템을 가져오는 중...'); // 완료 표시
