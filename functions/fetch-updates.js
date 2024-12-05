@@ -91,11 +91,24 @@ async function handler() {
     // 2. RSS 피드 파싱
     const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
     const recentItems = rss.items.filter(item => {
-      const guid = item.guid?.__text || 'unknown-guid';
-      const pubDate = new Date(item.pubDate).toISOString();
-      return !existingItemsSet.has(`${guid}|${pubDate}`);
+      try {
+        const guid = item.guid?.__text || 'unknown-guid';
+        const pubDateRaw = item.pubDate || 'Invalid Date';
+        
+        // 유효성 검증
+        const pubDate = new Date(pubDateRaw);
+        if (isNaN(pubDate.getTime())) {
+          console.warn('유효하지 않은 pubDate:', pubDateRaw);
+          return false;
+        }
+        
+        const pubDateISO = pubDate.toISOString();
+        return !existingItemsSet.has(`${guid}|${pubDateISO}`);
+      } catch (error) {
+        console.error('pubDate 변환 중 오류:', error);
+        return false;
+      }
     });
-
     console.log('새로운 업데이트 항목 수:', recentItems.length);
 
     // 3. 새로운 항목 요약 및 추가
