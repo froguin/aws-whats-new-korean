@@ -2,6 +2,7 @@ import { parse } from 'rss-to-json';
 import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
 import { getStore } from "@netlify/blobs";
 import fetch from 'node-fetch'; // node-fetch를 가져옵니다.
+import async from 'async';
 
 const CACHE_KEY_PREFIX = 'aws-updates-';
 const CACHE_TTL = 604800; // 7일 캐시 (초 단위)
@@ -14,6 +15,24 @@ const bedrockClient = new BedrockRuntimeClient({
     secretAccessKey: process.env.CUSTOM_AWS_SECRET_KEY
   }
 });
+
+const queue = async.queue(async (task, callback) => {
+  try {
+    const result = await task.fn(task.title, task.description);
+    callback(null, result);
+  } catch (error) {
+    callback(error);
+  }
+}, 2); // 동시에 2개의 요청만 처리
+
+async function queuedInvokeSummarization(title, description) {
+  return new Promise((resolve, reject) => {
+    queue.push({fn: invokeClaudeSummarization, title, description}, (error, result) => {
+      if (error) reject(error);
+      else resolve(result);
+    });
+  });
+}
 
 // 시스템 프롬프트 생성 함수
 function generateSystemPrompt(title, description) {
@@ -167,7 +186,7 @@ export const handler = async () => {
       if (now - itemDate > CACHE_TTL * 1000) return null; // 7일 이상된 아이템은 무시
 
       // Solar Pro 모델을 사용하여 요약 및 번역
-      const summaryResponse = await invokeClaudeSummarization(item.title, item.description);
+      const summaryResponse = await queuedInvokeSummarization(item.title, item.description);
       const cacheKey = `${CACHE_KEY_PREFIX}${item.guid}`;
 
       // 캐시 데이터 구조를 시스템 프롬프트의 예제 JSON에 맞춤
