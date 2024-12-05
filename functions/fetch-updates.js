@@ -304,7 +304,7 @@ export const handler = async () => {
             // 오류 발생 시에도 현재 캐시된 데이터 반환
           }
         } else {
-          console.log(`기존 아이템 ${itemGuid}는 이미 처리되었습니다.`);
+          console.log(`기존 아이템 ${itemGuid} (${item.title})는 이미 처리되었습니다.`);
         }
       }
     }
