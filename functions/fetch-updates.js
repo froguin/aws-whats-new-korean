@@ -89,14 +89,17 @@ async function invokeNovaLiteSummarization(title, description) {
       throw new Error('응답 본문이 비어 있습니다.');
     }
 
-    const parsedResponse = JSON.parse(decodedResponseBody); // JSON 파싱
+    const parsedResponse = JSON.parse(decodedResponseBody);
 
-    // parsedResponse.content가 정의되어 있는지 확인
-    if (!parsedResponse.content || !Array.isArray(parsedResponse.content) || parsedResponse.content.length === 0) {
+    // 응답 구조에 맞게 수정
+    if (!parsedResponse.output || !parsedResponse.output.message || !Array.isArray(parsedResponse.output.message.content) || parsedResponse.output.message.content.length === 0) {
       throw new Error('유효한 content가 응답에 포함되어 있지 않습니다.');
     }
 
-    return parseModelResponse(parsedResponse.content[0].text); // 안전하게 접근
+    // 응답에서 summary 추출
+    const summaryText = JSON.parse(parsedResponse.output.message.content[0].text).summary;
+
+    return parseModelResponse(summaryText); // summaryText를 사용하여 파싱
   } catch (error) {
     console.error('Nova 모델 호출 중 오류:', error);
     throw error;
