@@ -5,7 +5,7 @@ import { getStore } from "@netlify/blobs";
 const RSS_URL = 'https://aws.amazon.com/about-aws/whats-new/recent/feed/'
 const CACHE_KEY = 'aws-updates-v2';
 const CACHE_TTL_DAY = 7; // 7일간 정보 유지
-const MAX_ITEMS_TO_PROCESS = 3; // 최대 처리할 항목 수
+const MAX_ITEMS_TO_PROCESS = 30; // 최대 처리할 항목 수
 
 // AWS Bedrock 클라이언트 초기화
 const bedrockClient = new BedrockRuntimeClient({
@@ -133,9 +133,9 @@ async function saveCache(store, items) {
   // 기존 아이템과 새로운 아이템을 결합
   const combinedItems = [...existingItems, ...items];
 
-  // GUID 기반으로 중복 제거
+  // id 기반으로 중복 제거
   const uniqueItems = Array.from(new Set(combinedItems.map(item => item.id)))
-      .map(id => combinedItems.find(item => item.id === id)); // GUID에 해당하는 아이템 찾기
+      .map(id => combinedItems.find(item => item.id === id)); // id에 해당하는 아이템 찾기
 
   // 캐시 데이터 저장
   await store.set(CACHE_KEY, JSON.stringify({
@@ -151,9 +151,7 @@ async function processItem(item) {
   const itemPubDate = new Date(item.published).toISOString();
 
   try {
-    console.log('처리 시작:', item.title.substring(0, 30) + '...');
     const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
-    console.log('처리 완료:', item.title.substring(0, 30) + '...');
 
     const newItem = {
       title: summaryResponse.title,
@@ -216,16 +214,16 @@ export const handler = async () => {
 
     // RSS 피드 가져오기 및 필터링
     const rss = await parse(RSS_URL);
-    //console.log('RSS 객체:', rss); // RSS 객체의 구조를 확인
+    console.log('RSS 객체:', rss); // RSS 객체의 구조를 확인
     console.log('전체 RSS 항목 수:', rss.items.length);
     const recentItems = filterRecentItems(rss.items);
     console.log('일주일 이내 항목 수:', recentItems.length);
 
     // 중복되지 않는 아이템만 필터링
     const newItems = recentItems.filter(item => {
-      const itemId = item.id;
+      const itemid = item.id;
       const itemPubDate = new Date(item.published).toISOString();
-      return !existingItemsSet.has(`${itemId}|${itemPubDate}`);
+      return !existingItemsSet.has(`${itemid}|${itemPubDate}`);
     });
 
     console.log(`업데이트가 필요한 항목 수: ${newItems.length}`);
@@ -239,7 +237,19 @@ export const handler = async () => {
           break; // 최대 처리 수에 도달하면 루프 종료
         }
 
-        await processItem(item); // 중복 확인 없이 아이템 처리
+        const newItem = await processItem(item);
+        if (newItem) {
+          // 신규 아이템을 기존 캐시의 첫 번째로 삽입
+          const cachedData = await store.get(CACHE_KEY);
+          const existingItems = cachedData ? JSON.parse(cachedData).items : [];
+          existingItems.unshift(newItem); // 신규 아이템을 첫 번째로 추가
+
+          // 캐시 데이터 저장
+          await store.set(CACHE_KEY, JSON.stringify({
+            timestamp: new Date().toISOString(),
+            items: existingItems // 최종 아이템 저장
+          }));
+        }
         processedCount++; // 처리된 아이템 수 증가
       }
     }
@@ -251,7 +261,7 @@ export const handler = async () => {
       return (currentTime - itemTime) < (CACHE_TTL_DAY * 24 * 60 * 60 * 1000); // 7일보다 큰 경우 제거
     });
 
-    // GUID와 pubDate가 같은 아이템 중복 제거
+    // id와 pubDate가 같은 아이템 중복 제거
     const uniqueItems = Array.from(new Set(filteredItems.map(item => `${item.id}|${item.pubDate}`)))
       .map(id => filteredItems.find(item => `${item.id}|${item.pubDate}` === id));
 
