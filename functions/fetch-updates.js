@@ -217,8 +217,7 @@ let store;
 
 // 아이템 처리 함수
 async function processItem(item, processedItems, existingItemsSet) {
-  // RSS 피드에서 guid 값을 가져오기
-  const itemGuid = item.guid && item.guid.__text ? String(item.guid.__text) : 'unknown-guid'; // guid가 없을 경우 기본값 설정
+  const itemGuid = item.guid ? String(item.guid) : 'unknown-guid'; // guid가 없을 경우 기본값 설정
   const itemPubDate = new Date(item.published).toISOString(); // pubDate를 ISO 문자열로 변환
 
   // 기존 아이템과 비교하여 새로운 아이템인지 확인
@@ -253,7 +252,7 @@ async function processItem(item, processedItems, existingItemsSet) {
       await saveCache(store, processedItems);
 
       // 캐시 저장 후 로그 출력
-      console.log('캐시 저장 완료:', JSON.stringify(processedItems, null, 2));
+      console.log('캐시 저장 완료:', JSON.stringify(processedItems, null, 2)); // 이 부분은 삭제하지 않음
 
       return true; // 처리 성공
     } catch (error) {
@@ -305,6 +304,8 @@ export const handler = async () => {
     const cachedData = await store.get(CACHE_KEY);
     const processedItems = cachedData ? JSON.parse(cachedData).items : [];
 
+    console.log(`가져온 아이템 수: ${processedItems.length}`); // 가져온 아이템 수 로그 출력
+
     // 기존 아이템의 guid와 pubDate를 Set으로 저장
     const existingItemsSet = new Set(processedItems.map(item => `${item.guid}|${item.pubDate}`));
     console.log('기존 아이템 Set:', existingItemsSet);
@@ -321,7 +322,7 @@ export const handler = async () => {
 
     // 업데이트가 필요한 항목 수 세기
     for (const item of recentItems) {
-      const itemGuid = item.guid; // RSS 피드에서 guid 가져오기
+      const itemGuid = item.guid.__text; // RSS 피드에서 guid 가져오기
       const itemPubDate = new Date(item.published).toISOString(); // pubDate를 ISO 문자열로 변환
 
       // 기존 아이템과 비교하여 새로운 아이템인지 확인
