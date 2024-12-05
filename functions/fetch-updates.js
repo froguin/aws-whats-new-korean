@@ -228,7 +228,7 @@ async function processItem(item, processedItems, existingItemsSet) {
       console.log('처리 완료:', item.title.substring(0, 30) + '...');
 
       // 새로운 아이템을 맨 앞에 추가
-      processedItems.unshift({
+      const newItem = {
         title: summaryResponse.title,
         date: new Date(item.published).toLocaleDateString('ko-KR', {
           year: 'numeric',
@@ -241,9 +241,12 @@ async function processItem(item, processedItems, existingItemsSet) {
         regions: summaryResponse.regions || "지원 리전 정보 없음",
         status: summaryResponse.status || "일반 공개",
         originalLink: item.link || '',
-        guid: itemGuid, // guid 추가
+        guid: itemGuid, // RSS 피드에서 가져온 guid 사용
         pubDate: itemPubDate // pubDate를 ISO 문자열로 저장
-      });
+      };
+
+      // 새로운 아이템을 맨 앞에 추가
+      processedItems.unshift(newItem);
 
       // 아이템 처리 후 캐시 저장
       await saveCache(store, processedItems);
@@ -266,7 +269,6 @@ function filterRecentItems(rssItems) {
   return rssItems.filter(item => new Date(item.published) >= oneWeekAgo);
 }
 
-// 메인 핸들러 함수
 export const handler = async () => {
   try {
     console.log('=== Function started ===');
