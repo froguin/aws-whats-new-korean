@@ -119,9 +119,11 @@ async function invokeNovaLiteSummarization(title, description) {
 function parseModelResponse(responseText) {
   try {
     // 응답에서 내부 JSON 블록 찾기
-    const jsonStart = responseText.indexOf('{', responseText.indexOf('"title"'));
-    const jsonEnd = responseText.lastIndexOf('}');
-    const jsonString = responseText.substring(jsonStart, jsonEnd + 1);
+    const responseString = typeof responseText === 'string' ? responseText : JSON.stringify(responseText);
+    
+    const jsonStart = responseString.indexOf('{', responseString.indexOf('"title"'));
+    const jsonEnd = responseString.lastIndexOf('}');
+    const jsonString = responseString.substring(jsonStart, jsonEnd + 1);
 
     // 불필요한 문자 정리
     const cleanedJson = jsonString
