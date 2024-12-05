@@ -216,7 +216,7 @@ export const handler = async () => {
 
     // RSS 피드 가져오기 및 필터링
     const rss = await parse(RSS_URL);
-    console.log('RSS 객체:', rss); // RSS 객체의 구조를 확인
+    //console.log('RSS 객체:', rss); // RSS 객체의 구조를 확인
     console.log('전체 RSS 항목 수:', rss.items.length);
     const recentItems = filterRecentItems(rss.items);
     console.log('일주일 이내 항목 수:', recentItems.length);
