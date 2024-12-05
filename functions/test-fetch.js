@@ -145,7 +145,7 @@ Please provide a **single-line JSON-formatted response** with the following stru
 
 // 새로운 아이템 처리 함수
 async function processItem(item) {
-  const itemGuid = item.guid[0]; // guid를 배열에서 가져옴
+  const itemGuid = item.guid[0]._; // guid의 _ 값을 가져옴
   console.log('아이템 GUID:', itemGuid);
   const itemPubDate = new Date(item.pubDate[0]).toISOString(); // pubDate를 사용하여 ISO 형식으로 변환
 
