@@ -210,12 +210,9 @@ export const handler = async () => {
 
     // 기존 아이템 Set 생성
     const existingItemsSet = new Set(processedItems.map(item => `${item.id}|${item.pubDate}`));
-    console.log('기존 아이템 Set:', existingItemsSet);
 
     // RSS 피드 가져오기 및 필터링
     const rss = await parse(RSS_URL);
-    //console.log('RSS 객체:', rss); // RSS 객체의 구조를 확인
-    console.log('전체 RSS 항목 수:', rss.items.length);
     const recentItems = filterRecentItems(rss.items);
     console.log('일주일 이내 항목 수:', recentItems.length);
 
@@ -227,6 +224,8 @@ export const handler = async () => {
     });
 
     console.log(`업데이트가 필요한 항목 수: ${newItems.length}`);
+
+    let cacheTimestamp; // 캐시 타임스탬프 변수
 
     if (newItems.length > 0) {
       let processedCount = 0;
@@ -245,8 +244,9 @@ export const handler = async () => {
           existingItems.unshift(newItem); // 신규 아이템을 첫 번째로 추가
 
           // 캐시 데이터 저장
+          cacheTimestamp = new Date().toISOString(); // 캐시 타임스탬프 저장
           await store.set(CACHE_KEY, JSON.stringify({
-            timestamp: new Date().toISOString(),
+            timestamp: cacheTimestamp,
             items: existingItems // 최종 아이템 저장
           }));
         }
@@ -270,9 +270,27 @@ export const handler = async () => {
 
     // 정리한 내용을 캐시에 저장
     await saveCache(store, uniqueItems);
+
+    // 캐시된 아이템을 핸들러에서 반환
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        items: uniqueItems,
+        meta: {
+          isCached: true,
+          lastUpdated: cacheTimestamp || new Date().toISOString(), // 캐시 타임스탬프 사용
+          itemCount: uniqueItems.length,
+        },
+      }),
+    };
+
     console.log(`총 캐시된 아이템 수: ${uniqueItems.length}`);
     console.log('=== Function completed ===');
   } catch (error) {
     console.error('Error in handler:', error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'Internal Server Error' }),
+    };
   }
 };
