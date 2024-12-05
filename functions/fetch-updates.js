@@ -16,11 +16,11 @@ const bedrockClient = new BedrockRuntimeClient({
   }
 });
 
-// Nova Lite 모델을 사용한 요약 및 번역 함수
-async function invokeNovaLiteSummarization(title, description) {
+// Nova Micro 모델을 사용한 요약 및 번역 함수
+async function invokeNovaMicroSummarization(title, description) {
   const systemPrompt = generateSystemPrompt(title, description);
   const params = {
-    modelId: 'us.amazon.nova-lite-v1:0',
+    modelId: 'us.amazon.nova-micro-v1:0',
     contentType: 'application/json',
     accept: 'application/json',
     body: JSON.stringify({
@@ -151,7 +151,7 @@ async function processItem(item) {
   const itemPubDate = new Date(item.published).toISOString();
 
   try {
-    const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
+    const summaryResponse = await invokeNovaMicroSummarization(item.title, item.description);
 
     const newItem = {
       title: summaryResponse.title,
