@@ -126,17 +126,27 @@ Please provide a **single-line JSON-formatted response** with the following stru
 
 // 캐시 저장 함수
 async function saveCache(store, items) {
-  const cacheData = {
-    timestamp: new Date().toISOString(),
-    items: items
-  };
-  await store.set(CACHE_KEY, JSON.stringify(cacheData));
+  const cachedData = await store.get(CACHE_KEY);
+  const existingItems = cachedData ? JSON.parse(cachedData).items : []; // 기존 아이템 읽기
+
+  // 기존 아이템과 새로운 아이템을 결합
+  const combinedItems = [...existingItems, ...items];
+
+  // GUID 기반으로 중복 제거
+  const uniqueItems = Array.from(new Set(combinedItems.map(item => item.guid)))
+      .map(guid => combinedItems.find(item => item.guid === guid)); // GUID에 해당하는 아이템 찾기
+
+  // 캐시 데이터 저장
+  await store.set(CACHE_KEY, JSON.stringify({
+      timestamp: new Date().toISOString(),
+      items: uniqueItems // 최종 아이템 저장
+  }));
 }
 
 let store;
 
 async function processItem(item, processedItems, existingItemsSet) {
-  const itemGuid = item.guid || 'unknown-guid';
+  const itemGuid = item.guid;
   const itemPubDate = new Date(item.published).toISOString();
 
   if (!existingItemsSet.has(`${itemGuid}|${itemPubDate}`)) {
@@ -176,13 +186,6 @@ async function processItem(item, processedItems, existingItemsSet) {
   }
 }
 
-// 최근 아이템 필터링 함수
-function filterRecentItems(rssItems) {
-  const anAgo = new Date();
-  anAgo.setDate(anAgo.getDate() - CACHE_TTL_DAY);
-  return rssItems.filter(item => new Date(item.published) >= anAgo);
-}
-
 export const handler = async () => {
   try {
     console.log('=== Function started ===');
@@ -211,10 +214,14 @@ export const handler = async () => {
     const existingItemsSet = new Set(processedItems.map(item => `${item.guid}|${item.pubDate}`));
     console.log('기존 아이템 Set:', existingItemsSet);
 
-    // RSS 피드 가져오기 및 필터링
-    const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
+    // RSS 피드 가져오기
+    const rss = await parse(RSS_URL);
     console.log('전체 RSS 항목 수:', rss.items.length);
-    const recentItems = filterRecentItems(rss.items);
+
+    // 최근 아이템 필터링 로직을 handler 내로 이동
+    const anAgo = new Date();
+    anAgo.setDate(anAgo.getDate() - CACHE_TTL_DAY);
+    const recentItems = rss.items.filter(item => new Date(item.published) >= anAgo);
     console.log('일주일 이내 항목 수:', recentItems.length);
 
     let updateCount = 0;
@@ -244,9 +251,10 @@ export const handler = async () => {
         return (currentTime - itemTime) < (CACHE_TTL_DAY * 24 * 60 * 60 * 1000);
       });
 
-      await saveCache(store, filteredItems);
-      console.log(`처리된 새 아이템 수: ${processedCount}`);
-      console.log(`총 캐시된 아이템 수: ${filteredItems.length}`);
+    // 필터링된 항목을 저장
+    await saveCache(store, filteredItems);
+    console.log(`처리된 새 아이템 수: ${processedCount}`);
+    console.log(`총 캐시된 아이템 수: ${filteredItems.length}`);
     }
 
     console.log('=== Function completed ===');
