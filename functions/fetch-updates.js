@@ -134,8 +134,8 @@ async function saveCache(store, items) {
   const combinedItems = [...existingItems, ...items];
 
   // GUID 기반으로 중복 제거
-  const uniqueItems = Array.from(new Set(combinedItems.map(item => item.guid)))
-      .map(guid => combinedItems.find(item => item.guid === guid)); // GUID에 해당하는 아이템 찾기
+  const uniqueItems = Array.from(new Set(combinedItems.map(item => item.id)))
+      .map(id => combinedItems.find(item => item.id === id)); // GUID에 해당하는 아이템 찾기
 
   // 캐시 데이터 저장
   await store.set(CACHE_KEY, JSON.stringify({
@@ -147,7 +147,7 @@ async function saveCache(store, items) {
 let store;
 
 async function processItem(item) {
-  const itemGuid = item.guid;
+  const itemId = item.id;
   const itemPubDate = new Date(item.published).toISOString();
 
   try {
@@ -168,13 +168,13 @@ async function processItem(item) {
       regions: summaryResponse.regions || "지원 리전 정보 없음",
       status: summaryResponse.status || "일반 공개",
       originalLink: item.link || '',
-      guid: itemGuid,
+      id: itemId,
       pubDate: itemPubDate
     };
 
     return newItem;
   } catch (error) {
-    console.error(`아이템 처리 중 오류 (GUID: ${itemGuid}):`, error);
+    console.error(`아이템 처리 중 오류 (ID: ${itemId}):`, error);
     return null;
   }
 }
@@ -211,7 +211,7 @@ export const handler = async () => {
     console.log(`가져온 아이템 수: ${processedItems.length}`);
 
     // 기존 아이템 Set 생성
-    const existingItemsSet = new Set(processedItems.map(item => `${item.guid}|${item.pubDate}`));
+    const existingItemsSet = new Set(processedItems.map(item => `${item.id}|${item.pubDate}`));
     console.log('기존 아이템 Set:', existingItemsSet);
 
     // RSS 피드 가져오기 및 필터링
@@ -223,9 +223,9 @@ export const handler = async () => {
 
     // 중복되지 않는 아이템만 필터링
     const newItems = recentItems.filter(item => {
-      const itemGuid = item.guid;
+      const itemId = item.id;
       const itemPubDate = new Date(item.published).toISOString();
-      return !existingItemsSet.has(`${itemGuid}|${itemPubDate}`);
+      return !existingItemsSet.has(`${itemId}|${itemPubDate}`);
     });
 
     console.log(`업데이트가 필요한 항목 수: ${newItems.length}`);
@@ -252,8 +252,8 @@ export const handler = async () => {
     });
 
     // GUID와 pubDate가 같은 아이템 중복 제거
-    const uniqueItems = Array.from(new Set(filteredItems.map(item => `${item.guid}|${item.pubDate}`)))
-      .map(guid => filteredItems.find(item => `${item.guid}|${item.pubDate}` === guid));
+    const uniqueItems = Array.from(new Set(filteredItems.map(item => `${item.id}|${item.pubDate}`)))
+      .map(id => filteredItems.find(item => `${item.id}|${item.pubDate}` === id));
 
     // pubDate 기준으로 최신 정보가 맨 앞에 오도록 정렬
     uniqueItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
