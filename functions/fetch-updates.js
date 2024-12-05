@@ -248,12 +248,13 @@ export const handler = async () => {
     const recentItems = rss.items.filter(item => new Date(item.published) >= oneWeekAgo);
     console.log('일주일 이내 항목 수:', recentItems.length);
 
-    const processedItems = await Promise.all(recentItems.map(async item => {
+    const processedItems = [];
+    for (const item of recentItems) {
       console.log('처리 시작:', item.title.substring(0, 30) + '...');
-      const summaryResponse = await invokeClaudeSummarization(item.title, item.description);
+      const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
       console.log('처리 완료:', item.title.substring(0, 30) + '...');
-      
-      return {
+
+      processedItems.push({
         title: summaryResponse.title,
         date: new Date(item.published).toLocaleDateString('ko-KR', {
           year: 'numeric',
@@ -266,8 +267,8 @@ export const handler = async () => {
         regions: summaryResponse.regions || "지원 리전 정보 없음",
         status: summaryResponse.status || "일반 공개",
         originalLink: item.link || ''
-      };
-    }));
+      });
+    }
 
     // 새로운 데이터 캐시 저장
     const cacheData = {
