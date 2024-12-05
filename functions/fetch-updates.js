@@ -146,44 +146,37 @@ async function saveCache(store, items) {
 
 let store;
 
-async function processItem(item, processedItems, existingItemsSet) {
+async function processItem(item) {
   const itemGuid = item.guid;
   const itemPubDate = new Date(item.published).toISOString();
 
-  if (!existingItemsSet.has(`${itemGuid}|${itemPubDate}`)) {
-    try {
-      console.log('처리 시작:', item.title.substring(0, 30) + '...');
-      const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
-      console.log('처리 완료:', item.title.substring(0, 30) + '...');
+  try {
+    console.log('처리 시작:', item.title.substring(0, 30) + '...');
+    const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
+    console.log('처리 완료:', item.title.substring(0, 30) + '...');
 
-      const newItem = {
-        title: summaryResponse.title,
-        date: new Date(item.published).toLocaleDateString('ko-KR', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        }),
-        content: summaryResponse.summary,
-        target: summaryResponse.target || "모든 AWS 사용자",
-        features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
-        regions: summaryResponse.regions || "지원 리전 정보 없음",
-        status: summaryResponse.status || "일반 공개",
-        originalLink: item.link || '',
-        guid: itemGuid,
-        pubDate: itemPubDate
-      };
+    const newItem = {
+      title: summaryResponse.title,
+      date: new Date(item.published).toLocaleDateString('ko-KR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }),
+      content: summaryResponse.summary,
+      target: summaryResponse.target || "모든 AWS 사용자",
+      features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
+      regions: summaryResponse.regions || "지원 리전 정보 없음",
+      status: summaryResponse.status || "일반 공개",
+      originalLink: item.link || '',
+      guid: itemGuid,
+      pubDate: itemPubDate
+    };
 
-      processedItems.unshift(newItem);
-      await saveCache(store, processedItems);
-      console.log('캐시 저장 완료:', newItem.title);
-      return true;
-    } catch (error) {
-      console.error('아이템 처리 중 오류:', error);
-      return false;
-    }
-  } else {
-    console.log(`기존 아이템 ${itemGuid} (${item.title})는 이미 처리되었습니다.`);
-    return false;
+    // 처리된 아이템을 반환
+    return newItem; 
+  } catch (error) {
+    console.error('아이템 처리 중 오류:', error);
+    return null; // 오류 발생 시 null 반환
   }
 }
 
@@ -228,48 +221,39 @@ export const handler = async () => {
     const recentItems = filterRecentItems(rss.items);
     console.log('일주일 이내 항목 수:', recentItems.length);
 
-    let updateCount = 0;
-    for (const item of recentItems) {
+    // 중복되지 않는 아이템만 필터링
+    const newItems = recentItems.filter(item => {
       const itemGuid = item.guid;
       const itemPubDate = new Date(item.published).toISOString();
-      if (!existingItemsSet.has(`${itemGuid}|${itemPubDate}`)) {
-        updateCount++;
-      }
-    }
-    console.log(`업데이트가 필요한 항목 수: ${updateCount}`);
+      return !existingItemsSet.has(`${itemGuid}|${itemPubDate}`);
+    });
 
-    if (updateCount > 0) {
+    console.log(`업데이트가 필요한 항목 수: ${newItems.length}`);
+
+    if (newItems.length > 0) {
       let processedCount = 0;
-      for (const item of recentItems) {
+
+      for (const item of newItems) {
         if (processedCount >= MAX_ITEMS_TO_PROCESS) {
           console.log(`최대 처리 아이템 수(${MAX_ITEMS_TO_PROCESS})에 도달했습니다. 더 이상 처리하지 않습니다.`);
           break; // 최대 처리 수에 도달하면 루프 종료
         }
 
-        const processedItem = await processItem(item, existingItemsSet);
-        if (processedItem) {
-          // 캐시된 아이템을 기반으로 새로운 아이템 생성
-          processedItems.unshift(processedItem);
-          await saveCache(store, processedItems);
-          console.log('캐시 저장 완료:', processedItem.title);
-          processedCount++; // 처리된 아이템 수 증가
-        }
+        await processItem(item); // 중복 확인 없이 아이템 처리
+        processedCount++; // 처리된 아이템 수 증가
       }
+    }
 
     // 캐시 정리 및 저장
     const currentTime = Date.now();
-    // 마지막으로 저장된 캐시를 다시 읽어들임
-    const cachedData = await store.get(CACHE_KEY);
-    let processedItems = cachedData ? JSON.parse(cachedData).items : []; // processedItems 초기화
-
     const filteredItems = processedItems.filter(item => {
-        const itemTime = new Date(item.pubDate).getTime();
-        return (currentTime - itemTime) < (CACHE_TTL_DAY * 24 * 60 * 60 * 1000); // 7일보다 큰 경우 제거
+      const itemTime = new Date(item.pubDate).getTime();
+      return (currentTime - itemTime) < (CACHE_TTL_DAY * 24 * 60 * 60 * 1000); // 7일보다 큰 경우 제거
     });
 
     // GUID와 pubDate가 같은 아이템 중복 제거
     const uniqueItems = Array.from(new Set(filteredItems.map(item => `${item.guid}|${item.pubDate}`)))
-        .map(guid => filteredItems.find(item => `${item.guid}|${item.pubDate}` === guid));
+      .map(guid => filteredItems.find(item => `${item.guid}|${item.pubDate}` === guid));
 
     // pubDate 기준으로 최신 정보가 맨 앞에 오도록 정렬
     uniqueItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
@@ -277,7 +261,6 @@ export const handler = async () => {
     // 정리한 내용을 캐시에 저장
     await saveCache(store, uniqueItems);
     console.log(`총 캐시된 아이템 수: ${uniqueItems.length}`);
-    console.log(`처리된 새 아이템 수: ${processedCount}`);
     console.log('=== Function completed ===');
   } catch (error) {
     console.error('Error in handler:', error);
