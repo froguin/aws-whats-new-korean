@@ -131,6 +131,7 @@ async function handler() {
     };
   } catch (error) {
     console.error('오류 발생:', error);
+    console.error('오류 세부 정보:', JSON.stringify(error, null, 2));
     return {
       statusCode: 500,
       body: JSON.stringify({ error: '처리 오류' })
