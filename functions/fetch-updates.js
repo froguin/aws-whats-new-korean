@@ -17,22 +17,14 @@ const bedrockClient = new BedrockRuntimeClient({
 
 // Nova Lite 모델을 사용한 요약 및 번역 함수
 async function invokeNovaLiteSummarization(title, description) {
-  const systemPrompt = generateSystemPrompt();
-  const userPrompt = `Title: ${title}\nDescription: ${description}`;
+  const systemPrompt = generateSystemPrompt(title, description);
   const params = {
     modelId: 'us.amazon.nova-lite-v1:0',
     contentType: 'application/json',
     accept: 'application/json',
     body: JSON.stringify({
       schemaVersion: "messages-v1",
-      messages: [{ role: "user", content: [{ text: userPrompt }] }],
-      system: [{ text: systemPrompt }],
-      inferenceConfig: {
-        max_new_tokens: 1000,
-        top_p: 0.9,
-        top_k: 20,
-        temperature: 0.7
-      }
+      messages: [{ role: "user", content: [{ text: systemPrompt }] }],
     })
   };
 
@@ -40,35 +32,64 @@ async function invokeNovaLiteSummarization(title, description) {
     const command = new InvokeModelCommand(params);
     const response = await bedrockClient.send(command);
     const decodedResponseBody = new TextDecoder().decode(response.body);
-    if (!decodedResponseBody) throw new Error('응답 본문이 비어 있습니다.');
+    console.log('응답 본문:', decodedResponseBody);
+    if (!decodedResponseBody) {
+      throw new Error('응답 본문이 비어 있습니다.');
+    }
     const parsedResponse = JSON.parse(decodedResponseBody);
     if (!parsedResponse.output || !parsedResponse.output.message || !Array.isArray(parsedResponse.output.message.content) || parsedResponse.output.message.content.length === 0) {
       throw new Error('유효한 content가 응답에 포함되어 있지 않습니다.');
     }
     const jsonString = parsedResponse.output.message.content[0].text;
-    return parseModelResponse(JSON.parse(jsonString));
+    let summaryData = JSON.parse(jsonString);
+    return parseModelResponse(summaryData);
   } catch (error) {
     console.error('Nova 모델 호출 중 오류:', error);
     throw error;
   }
 }
 
-// 모델 응답 파싱 함수
-function parseModelResponse(response) {
-  return {
-    title: response.title || '제목 없음',
-    summary: response.summary || '내용 없음',
-    target: response.target || "모든 AWS 사용자",
-    features: response.features || "자세한 내용은 원문을 참조하세요",
-    regions: response.regions || "지원 리전 정보 없음",
-    status: response.status || "알 수 없음"
-  };
+function parseModelResponse(responseText) {
+  try {
+    const responseString = typeof responseText === 'string' ? responseText : JSON.stringify(responseText);
+    const jsonStart = responseString.indexOf('{', responseString.indexOf('"title"'));
+    const jsonEnd = responseString.lastIndexOf('}');
+    const jsonString = responseString.substring(jsonStart, jsonEnd + 1);
+    const cleanedJson = jsonString
+      .replace(/\\n/g, ' ')
+      .replace(/\\t/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/\\\\"/g, '"')
+      .replace(/\\'/g, "'")
+      .trim();
+    const parsedResponse = JSON.parse(cleanedJson);
+    if (typeof parsedResponse.content === 'string' && parsedResponse.content.startsWith('{')) {
+      try {
+        parsedResponse.content = JSON.parse(parsedResponse.content);
+      } catch (contentError) {
+        console.warn('content 파싱 실패:', contentError);
+      }
+    }
+    return {
+      title: parsedResponse.title || '제목 없음',
+      summary: parsedResponse.summary || '내용 없음',
+      target: parsedResponse.target || "모든 AWS 사용자",
+      features: parsedResponse.features || "자세한 내용은 원문을 참조하세요",
+      regions: parsedResponse.regions || "지원 리전 정보 없음",
+      status: parsedResponse.status || "알 수 없음"
+    };
+  } catch (error) {
+    console.error('JSON 파싱 오류:', error);
+    return {
+      title: '파싱 오류 발생',
+      summary: responseText
+    };
+  }
 }
 
-// 시스템 프롬프트 생성 함수
-function generateSystemPrompt() {
+function generateSystemPrompt(title, description) {
   return `
-You are an expert in analyzing AWS service updates and providing concise, structured summaries for Korean-speaking AWS users.
+    You are an expert in analyzing AWS service updates and providing concise, structured summaries for Korean-speaking AWS users.
 
 Original Title: ${title}
 Original Description: ${description}
@@ -105,14 +126,18 @@ Please provide a **single-line JSON-formatted response** with the following stru
 
 // 캐시 저장 함수
 async function saveCache(store, items) {
-  const cacheData = { timestamp: new Date().toISOString(), items };
+  const cacheData = {
+    timestamp: new Date().toISOString(),
+    items: items
+  };
   await store.set(CACHE_KEY, JSON.stringify(cacheData));
 }
 
-// 아이템 처리 함수
-async function processItem(item, processedItems, existingItemsSet, store) {
-  const itemGuid = item.guid || 'unknown-guid'; // RSS 피드에서 guid 가져오기
-  const itemPubDate = new Date(item.pubDate).toISOString(); // pubDate를 ISO 문자열로 변환
+let store;
+
+async function processItem(item, processedItems, existingItemsSet) {
+  const itemGuid = item.guid || 'unknown-guid';
+  const itemPubDate = new Date(item.published).toISOString();
 
   if (!existingItemsSet.has(`${itemGuid}|${itemPubDate}`)) {
     try {
@@ -122,12 +147,16 @@ async function processItem(item, processedItems, existingItemsSet, store) {
 
       const newItem = {
         title: summaryResponse.title,
-        date: new Date(item.pubDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }),
+        date: new Date(item.published).toLocaleDateString('ko-KR', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        }),
         content: summaryResponse.summary,
-        target: summaryResponse.target,
-        features: summaryResponse.features,
-        regions: summaryResponse.regions,
-        status: summaryResponse.status,
+        target: summaryResponse.target || "모든 AWS 사용자",
+        features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
+        regions: summaryResponse.regions || "지원 리전 정보 없음",
+        status: summaryResponse.status || "일반 공개",
         originalLink: item.link || '',
         guid: itemGuid,
         pubDate: itemPubDate
@@ -149,24 +178,25 @@ async function processItem(item, processedItems, existingItemsSet, store) {
 
 // 최근 아이템 필터링 함수
 function filterRecentItems(rssItems) {
-  const oneWeekAgo = new Date();
-  oneWeekAgo.setDate(oneWeekAgo.getDate() - CACHE_TTL_DAY);
-  return rssItems.filter(item => new Date(item.pubDate) >= oneWeekAgo);
+  const anAgo = new Date();
+  anAgo.setDate(anAgo.getDate() - CACHE_TTL_DAY);
+  return rssItems.filter(item => new Date(item.published) >= anAgo);
 }
 
-// Lambda 핸들러 함수
 export const handler = async () => {
   try {
     console.log('=== Function started ===');
-    
     // 환경 변수 확인
     const requiredEnvVars = ['CUSTOM_AWS_ACCESS_KEY', 'CUSTOM_AWS_SECRET_KEY', 'CUSTOM_AWS_REGION', 'NETLIFY_SITE_ID', 'NETLIFY_ACCESS_TOKEN'];
     requiredEnvVars.forEach(varName => {
-      if (!process.env[varName]) throw new Error(`Required environment variable ${varName} is missing`);
+      if (!process.env[varName]) {
+        throw new Error(`Required environment variable ${varName} is missing`);
+      }
     });
+    console.log('환경변수 확인 완료');
 
     // Blob 스토어 초기화
-    const store = getStore({
+    store = getStore({
       name: "aws-updates-store",
       siteID: process.env.NETLIFY_SITE_ID,
       token: process.env.NETLIFY_ACCESS_TOKEN
@@ -175,33 +205,51 @@ export const handler = async () => {
     // 캐시에서 기존 데이터 가져오기
     const cachedData = await store.get(CACHE_KEY);
     const processedItems = cachedData ? JSON.parse(cachedData).items : [];
-    
+    console.log(`가져온 아이템 수: ${processedItems.length}`);
+
     // 기존 아이템 Set 생성
     const existingItemsSet = new Set(processedItems.map(item => `${item.guid}|${item.pubDate}`));
+    console.log('기존 아이템 Set:', existingItemsSet);
 
     // RSS 피드 가져오기 및 필터링
     const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
+    console.log('전체 RSS 항목 수:', rss.items.length);
     const recentItems = filterRecentItems(rss.items);
+    console.log('일주일 이내 항목 수:', recentItems.length);
 
-    let processedCount = 0;
-    
+    let updateCount = 0;
     for (const item of recentItems) {
-      if (await processItem(item, processedItems, existingItemsSet, store)) {
-        processedCount++;
-        if (processedCount >= MAX_ITEMS_TO_PROCESS) break;
+      const itemGuid = item.guid;
+      const itemPubDate = new Date(item.published).toISOString();
+      if (!existingItemsSet.has(`${itemGuid}|${itemPubDate}`)) {
+        updateCount++;
       }
     }
+    console.log(`업데이트가 필요한 항목 수: ${updateCount}`);
+
+    if (updateCount > 0) {
+      let processedCount = 0;
+      for (const item of recentItems) {
+        if (await processItem(item, processedItems, existingItemsSet)) {
+          processedCount++;
+          if (processedCount >= MAX_ITEMS_TO_PROCESS) break;
+        }
+      }
 
     // 캐시 정리 및 저장
     processedItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
-    
-    const currentTime = Date.now();
-    const filteredItems = processedItems.filter(item => (currentTime - new Date(item.date).getTime()) < (CACHE_TTL_DAY * 24 * 60 * 60 * 1000));
-    
-    await saveCache(store, filteredItems);
+      const currentTime = Date.now();
+      const filteredItems = processedItems.filter(item => {
+        const itemTime = new Date(item.date).getTime();
+        return (currentTime - itemTime) < (CACHE_TTL_DAY * 24 * 60 * 60 * 1000);
+      });
 
-    console.log(`처리된 새 아이템 수: ${processedCount}`);
-    
+      await saveCache(store, filteredItems);
+      console.log(`처리된 새 아이템 수: ${processedCount}`);
+      console.log(`총 캐시된 아이템 수: ${filteredItems.length}`);
+    }
+
+    console.log('=== Function completed ===');
   } catch (error) {
     console.error('Error in handler:', error);
   }
