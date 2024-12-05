@@ -212,6 +212,9 @@ async function saveCache(store, items) {
   await store.set(CACHE_KEY, JSON.stringify(cacheData));
 }
 
+// 전역 변수로 store 선언
+let store;
+
 // 아이템 처리 함수
 async function processItem(item, processedItems, existingItemsSet) {
   const itemGuid = item.guid ? String(item.guid) : 'unknown-guid'; // guid가 없을 경우 기본값 설정
@@ -263,6 +266,7 @@ function filterRecentItems(rssItems) {
   return rssItems.filter(item => new Date(item.published) >= oneWeekAgo);
 }
 
+// 메인 핸들러 함수
 export const handler = async () => {
   try {
     console.log('=== Function started ===');
@@ -285,7 +289,7 @@ export const handler = async () => {
     console.log('환경변수 확인 완료');
 
     // Blob 스토어 초기화
-    const store = getStore({
+    store = getStore({
       name: "aws-updates-store",
       siteID: process.env.NETLIFY_SITE_ID,
       token: process.env.NETLIFY_ACCESS_TOKEN
@@ -294,10 +298,6 @@ export const handler = async () => {
     // 캐시에서 기존 데이터 가져오기
     const cachedData = await store.get(CACHE_KEY);
     const processedItems = cachedData ? JSON.parse(cachedData).items : [];
-
-    // 캐시된 데이터 확인 로그 추가
-    console.log('가져온 캐시 데이터:', cachedData);
-    console.log('처리된 아이템:', processedItems);
 
     // 기존 아이템의 guid와 pubDate를 Set으로 저장
     const existingItemsSet = new Set(processedItems.map(item => `${item.guid}|${item.pubDate}`));
