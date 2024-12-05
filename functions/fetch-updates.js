@@ -292,16 +292,20 @@ export const handler = async () => {
     const cachedData = await store.get(CACHE_KEY);
     const processedItems = cachedData ? JSON.parse(cachedData).items : [];
 
+    // 캐시된 데이터 확인 로그 추가
+    console.log('가져온 캐시 데이터:', cachedData);
+    console.log('처리된 아이템:', processedItems);
+
+    // 기존 아이템의 guid와 pubDate를 Set으로 저장
+    const existingItemsSet = new Set(processedItems.map(item => `${item.guid}|${item.pubDate}`));
+    console.log('기존 아이템 Set:', existingItemsSet);
+
     // RSS 피드 가져오기
     const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
     console.log('전체 RSS 항목 수:', rss.items.length);
 
     const recentItems = filterRecentItems(rss.items);
     console.log('일주일 이내 항목 수:', recentItems.length);
-
-    // 기존 아이템의 guid와 pubDate를 Set으로 저장
-    const existingItemsSet = new Set(processedItems.map(item => `${item.guid}|${item.pubDate}`));
-    console.log('기존 아이템 Set:', existingItemsSet);
 
     // 업데이트가 필요한 항목 수
     let updateCount = 0;
