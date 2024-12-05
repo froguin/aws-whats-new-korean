@@ -242,6 +242,9 @@ async function processItem(item, processedItems, existingItemsSet) {
         pubDate: itemPubDate // pubDate를 ISO 문자열로 저장
       });
 
+      // 아이템 처리 후 캐시 저장
+      await saveCache(store, processedItems);
+
       return true; // 처리 성공
     } catch (error) {
       console.error('아이템 처리 중 오류:', error);
