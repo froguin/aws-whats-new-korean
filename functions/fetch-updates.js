@@ -301,6 +301,7 @@ export const handler = async () => {
 
     // 기존 아이템의 guid와 pubDate를 Set으로 저장
     const existingItemsSet = new Set(processedItems.map(item => `${item.guid}|${item.pubDate}`));
+    console.log('기존 아이템 Set:', existingItemsSet);
 
     // 업데이트가 필요한 항목 수
     let updateCount = 0;
