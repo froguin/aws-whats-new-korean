@@ -225,6 +225,11 @@ export const handler = async () => {
     const newItems = recentItems.filter(item => {
       const itemGuid = item.guid;
       const itemPubDate = new Date(item.published).toISOString();
+      // 유효한 값인지 확인
+      console.log('Item Title:', item.title);
+      console.log('GUID:', itemGuid);
+      console.log('Published:', item.published);
+      console.log('Published Date as ISO:', itemPubDate);
       return !existingItemsSet.has(`${itemGuid}|${itemPubDate}`);
     });
 
