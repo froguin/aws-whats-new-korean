@@ -269,25 +269,35 @@ export const handler = async () => {
     console.log('일주일 이내 항목 수:', recentItems.length);
 
     const processedItems = [];
-    for (const item of recentItems) {
-      console.log('처리 시작:', item.title.substring(0, 30) + '...');
-      const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
-      console.log('처리 완료:', item.title.substring(0, 30) + '...');
+    const chunkSize = 20; // 한 번에 처리할 항목 수
 
-      processedItems.push({
-        title: summaryResponse.title,
-        date: new Date(item.published).toLocaleDateString('ko-KR', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        }),
-        content: summaryResponse.summary,
-        target: summaryResponse.target || "모든 AWS 사용자",
-        features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
-        regions: summaryResponse.regions || "지원 리전 정보 없음",
-        status: summaryResponse.status || "일반 공개",
-        originalLink: item.link || ''
+    // recentItems를 chunkSize만큼 나누기
+    for (let i = 0; i < recentItems.length; i += chunkSize) {
+      const chunk = recentItems.slice(i, i + chunkSize);
+      const promises = chunk.map(async (item) => {
+        console.log('처리 시작:', item.title.substring(0, 30) + '...');
+        const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
+        console.log('처리 완료:', item.title.substring(0, 30) + '...');
+        
+        return {
+          title: summaryResponse.title,
+          date: new Date(item.published).toLocaleDateString('ko-KR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          }),
+          content: summaryResponse.summary,
+          target: summaryResponse.target || "모든 AWS 사용자",
+          features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
+          regions: summaryResponse.regions || "지원 리전 정보 없음",
+          status: summaryResponse.status || "일반 공개",
+          originalLink: item.link || ''
+        };
       });
+
+      // 모든 요청이 완료될 때까지 대기
+      const results = await Promise.all(promises);
+      processedItems.push(...results);
     }
 
     // 새로운 데이터 캐시 저장
