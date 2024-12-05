@@ -202,7 +202,7 @@ async function getCachedDataWithRetry(store, key, retries = 3) {
 
 export const handler = async () => {
   try {
-    console.log('=== Function started ===');
+    //console.log('=== Function started ===');
     // 환경 변수 확인
     const requiredEnvVars = ['CUSTOM_AWS_ACCESS_KEY', 'CUSTOM_AWS_SECRET_KEY', 'CUSTOM_AWS_REGION', 'NETLIFY_SITE_ID', 'NETLIFY_ACCESS_TOKEN'];
     requiredEnvVars.forEach(varName => {
@@ -289,7 +289,7 @@ export const handler = async () => {
     }
 
     // 캐시된 아이템을 핸들러에서 반환
-    console.log('캐시된 아이템을 가져오는 중...'); // 완료 표시
+    console.log(`총 캐시된 아이템 수: ${uniqueItems.length}`);
     const lastUpdated = await store.get(CACHE_KEY) ? JSON.parse(await store.get(CACHE_KEY)).timestamp : '정보 없음'; // 캐시 타임스탬프 가져오기
 
     return {
@@ -304,8 +304,7 @@ export const handler = async () => {
       }),
     };
 
-    console.log(`총 캐시된 아이템 수: ${uniqueItems.length}`);
-    console.log('=== Function completed ===');
+    //console.log('=== Function completed ===');
   } catch (error) {
     console.error('Error in handler:', error);
     return {
