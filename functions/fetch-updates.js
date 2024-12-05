@@ -148,7 +148,6 @@ let store;
 
 async function processItem(item) {
   const itemGuid = item.guid;
-  console.log('아이템 GUID:', itemGuid);
   const itemPubDate = new Date(item.published).toISOString();
 
   try {
@@ -217,6 +216,7 @@ export const handler = async () => {
 
     // RSS 피드 가져오기 및 필터링
     const rss = await parse(RSS_URL);
+    console.log('RSS 객체:', rss); // RSS 객체의 구조를 확인
     console.log('전체 RSS 항목 수:', rss.items.length);
     const recentItems = filterRecentItems(rss.items);
     console.log('일주일 이내 항목 수:', recentItems.length);
@@ -225,11 +225,6 @@ export const handler = async () => {
     const newItems = recentItems.filter(item => {
       const itemGuid = item.guid;
       const itemPubDate = new Date(item.published).toISOString();
-      // 유효한 값인지 확인
-      console.log('Item Title:', item.title);
-      console.log('GUID:', itemGuid);
-      console.log('Published:', item.published);
-      console.log('Published Date as ISO:', itemPubDate);
       return !existingItemsSet.has(`${itemGuid}|${itemPubDate}`);
     });
 
