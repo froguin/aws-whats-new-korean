@@ -287,7 +287,7 @@ async function processNewItems(store, processedItems) {
     // 최근 아이템을 하나씩 처리
     for (const item of recentItems) {
       const itemGuid = item.guid; // RSS 피드에서 guid 가져오기
-      const itemPubDate = item.published; // RSS 피드에서 pubDate 가져오기
+      const itemPubDate = new Date(item.published).toISOString(); // pubDate를 ISO 문자열로 변환
 
       // 기존 아이템과 비교하여 새로운 아이템인지 확인
       if (!existingItemsSet.has(`${itemGuid}|${itemPubDate}`)) {
@@ -311,7 +311,7 @@ async function processNewItems(store, processedItems) {
             status: summaryResponse.status || "일반 공개",
             originalLink: item.link || '',
             guid: itemGuid, // guid 추가
-            pubDate: itemPubDate // pubDate 추가
+            pubDate: itemPubDate // pubDate를 ISO 문자열로 저장
           });
 
           // 캐시 저장
