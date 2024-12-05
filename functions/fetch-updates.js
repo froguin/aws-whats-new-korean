@@ -278,7 +278,7 @@ export const handler = async () => {
         items: uniqueItems,
         meta: {
           isCached: true,
-          lastUpdated: cacheTimestamp || new Date().toISOString(), // 캐시 타임스탬프 사용
+          lastUpdated: uniqueItems[0].timestamp, // 캐시 타임스탬프 사용
           itemCount: uniqueItems.length,
         },
       }),
