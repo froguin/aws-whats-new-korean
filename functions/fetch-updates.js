@@ -252,6 +252,9 @@ async function processItem(item, processedItems, existingItemsSet) {
       // 아이템 처리 후 캐시 저장
       await saveCache(store, processedItems);
 
+      // 캐시 저장 후 로그 출력
+      console.log('캐시 저장 완료:', JSON.stringify(processedItems, null, 2));
+
       return true; // 처리 성공
     } catch (error) {
       console.error('아이템 처리 중 오류:', error);
