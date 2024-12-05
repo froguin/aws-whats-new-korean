@@ -80,14 +80,12 @@ async function invokeNovaLiteSummarization(title, description) {
   try {
     const command = new InvokeModelCommand(params);
     const response = await bedrockClient.send(command);
-    const responseStream = Readable.from(response.body);
+    const responseBody = await response.body.text();
+    const chunkJson = JSON.parse(responseBody);
     let fullResponse = '';
 
-    for await (const chunk of responseStream) {
-      const chunkJson = JSON.parse(chunk.toString());
-      if (chunkJson.contentBlockDelta) {
-        fullResponse += chunkJson.contentBlockDelta.delta.text;
-      }
+    if (chunkJson.contentBlockDelta) {
+      fullResponse += chunkJson.contentBlockDelta.delta.text;
     }
 
     return parseModelResponse(fullResponse);
