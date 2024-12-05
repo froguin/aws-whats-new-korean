@@ -202,6 +202,64 @@ Please provide a **single-line JSON-formatted response** with the following stru
 `;
 }
 
+// 캐시 저장 함수
+async function saveCache(store, items) {
+  const cacheData = {
+    timestamp: new Date().toISOString(),
+    items: items
+  };
+  await store.set(CACHE_KEY, JSON.stringify(cacheData), { ttl: CACHE_TTL });
+}
+
+
+// 아이템 처리 함수
+async function processItem(item, processedItems, existingItemsSet) {
+  const itemGuid = item.guid ? String(item.guid) : 'unknown-guid'; // guid가 없을 경우 기본값 설정
+  const itemPubDate = new Date(item.published).toISOString(); // pubDate를 ISO 문자열로 변환
+
+  // 기존 아이템과 비교하여 새로운 아이템인지 확인
+  if (!existingItemsSet.has(`${itemGuid}|${itemPubDate}`)) {
+    try {
+      console.log('처리 시작:', item.title.substring(0, 30) + '...');
+      const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
+      console.log('처리 완료:', item.title.substring(0, 30) + '...');
+
+      // 새로운 아이템을 맨 앞에 추가
+      processedItems.unshift({
+        title: summaryResponse.title,
+        date: new Date(item.published).toLocaleDateString('ko-KR', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        }),
+        content: summaryResponse.summary,
+        target: summaryResponse.target || "모든 AWS 사용자",
+        features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
+        regions: summaryResponse.regions || "지원 리전 정보 없음",
+        status: summaryResponse.status || "일반 공개",
+        originalLink: item.link || '',
+        guid: itemGuid, // guid 추가
+        pubDate: itemPubDate // pubDate를 ISO 문자열로 저장
+      });
+
+      return true; // 처리 성공
+    } catch (error) {
+      console.error('아이템 처리 중 오류:', error);
+      return false; // 처리 실패
+    }
+  } else {
+    console.log(`기존 아이템 ${itemGuid} (${item.title})는 이미 처리되었습니다.`);
+    return false; // 이미 처리된 아이템
+  }
+}
+
+// RSS 피드에서 최근 아이템 필터링 함수
+function filterRecentItems(rssItems) {
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  return rssItems.filter(item => new Date(item.published) >= oneWeekAgo);
+}
+
 export const handler = async () => {
   try {
     console.log('=== Function started ===');
@@ -238,9 +296,7 @@ export const handler = async () => {
     const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
     console.log('전체 RSS 항목 수:', rss.items.length);
 
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const recentItems = rss.items.filter(item => new Date(item.published) >= oneWeekAgo);
+    const recentItems = filterRecentItems(rss.items);
     console.log('일주일 이내 항목 수:', recentItems.length);
 
     // 기존 아이템의 guid와 pubDate를 Set으로 저장
@@ -262,49 +318,13 @@ export const handler = async () => {
 
     console.log(`업데이트가 필요한 항목 수: ${updateCount}`);
 
-    // 업데이트가 필요한 항목만 처리
+    // 업데이트가 필요한 항목만 처리 (최대 7개)
     if (updateCount > 0) {
+      let processedCount = 0; // 처리한 항목 수 카운터
       for (const item of recentItems) {
-        const itemGuid = item.guid; // RSS 피드에서 guid 가져오기
-        const itemPubDate = new Date(item.published).toISOString(); // pubDate를 ISO 문자열로 변환
-
-        // 기존 아이템과 비교하여 새로운 아이템인지 확인
-        if (!existingItemsSet.has(`${itemGuid}|${itemPubDate}`)) {
-          try {
-            console.log('처리 시작:', item.title.substring(0, 30) + '...');
-            const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
-            console.log('처리 완료:', item.title.substring(0, 30) + '...');
-
-            // 새로운 아이템을 맨 앞에 추가
-            processedItems.unshift({
-              title: summaryResponse.title,
-              date: new Date(item.published).toLocaleDateString('ko-KR', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              }),
-              content: summaryResponse.summary,
-              target: summaryResponse.target || "모든 AWS 사용자",
-              features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
-              regions: summaryResponse.regions || "지원 리전 정보 없음",
-              status: summaryResponse.status || "일반 공개",
-              originalLink: item.link || '',
-              guid: itemGuid, // guid 추가
-              pubDate: itemPubDate // pubDate를 ISO 문자열로 저장
-            });
-
-            // 캐시 저장
-            const cacheData = {
-              timestamp: new Date().toISOString(),
-              items: processedItems
-            };
-            await store.set(CACHE_KEY, JSON.stringify(cacheData), { ttl: CACHE_TTL });
-          } catch (error) {
-            console.error('아이템 처리 중 오류:', error);
-            // 오류 발생 시에도 현재 캐시된 데이터 반환
-          }
-        } else {
-          console.log(`기존 아이템 ${itemGuid} (${item.title})는 이미 처리되었습니다.`);
+        if (await processItem(item, processedItems, existingItemsSet)) {
+          processedCount++; // 처리한 항목 수 증가
+          if (processedCount >= 7) break; // 7개 처리 후 종료
         }
       }
     }
@@ -320,11 +340,7 @@ export const handler = async () => {
     });
 
     // 최종 캐시 저장
-    const finalCacheData = {
-      timestamp: new Date().toISOString(),
-      items: filteredItems
-    };
-    await store.set(CACHE_KEY, JSON.stringify(finalCacheData), { ttl: CACHE_TTL });
+    await saveCache(store, filteredItems);
 
     console.log('=== New items processed ===');
   } catch (error) {
