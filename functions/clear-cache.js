@@ -9,7 +9,8 @@ export const handler = async () => {
     });
 
     await store.delete('aws-updates-v2');
-    
+    await store.delete('aws-updates-undefined');
+  
     return {
       statusCode: 200,
       body: JSON.stringify({ message: '캐시가 성공적으로 초기화되었습니다.' })
