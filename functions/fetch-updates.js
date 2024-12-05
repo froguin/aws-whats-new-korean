@@ -265,9 +265,11 @@ export const handler = async () => {
     uniqueItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
     // 캐시 정리 및 저장 조건: filteredItems와 processedItems의 카운트가 다르거나 filteredItems에 중복이 있을 경우
+    let isCached = true; // 기본값을 true로 설정
     if (uniqueItems.length !== filteredItems.length || uniqueItems.length !== processedItems.length) {
       // 정리한 내용을 캐시에 저장
       await saveCache(store, uniqueItems);
+      isCached = false; // saveCache를 호출한 경우 isCached를 false로 설정
     }
 
     // 캐시된 아이템을 핸들러에서 반환
@@ -279,7 +281,7 @@ export const handler = async () => {
       body: JSON.stringify({
         items: uniqueItems,
         meta: {
-          isCached: true,
+          isCached: isCached, // saveCache 호출 여부에 따라 isCached 설정
           lastUpdated: lastUpdated, // 캐시 타임스탬프를 직접 사용
           itemCount: uniqueItems.length,
         },
