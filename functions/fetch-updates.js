@@ -96,10 +96,19 @@ async function invokeNovaLiteSummarization(title, description) {
       throw new Error('유효한 content가 응답에 포함되어 있지 않습니다.');
     }
 
-    // 응답에서 summary 추출
-    const summaryText = JSON.parse(parsedResponse.output.message.content[0].text).summary;
+    // 응답에서 JSON 문자열 추출
+    const jsonString = parsedResponse.output.message.content[0].text;
 
-    return parseModelResponse(summaryText); // summaryText를 사용하여 파싱
+    // JSON 파싱
+    let summaryData;
+    try {
+      summaryData = JSON.parse(jsonString);
+    } catch (error) {
+      throw new Error('JSON 파싱 오류: ' + error.message);
+    }
+
+    // summaryData에서 필요한 정보 추출
+    return parseModelResponse(summaryData); // summaryData를 사용하여 파싱
   } catch (error) {
     console.error('Nova 모델 호출 중 오류:', error);
     throw error;
