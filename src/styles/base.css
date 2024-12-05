@@ -2,11 +2,12 @@
 @tailwind components;
 @tailwind utilities; 
 
-@layer base {
-    @font-face {
-        font-family: "Amazon Ember", "Noto Sans KR", sans-serif;
-    }
-}  
+@layer base {    
+  body {
+    font-family: "Amazon Ember", "Noto Sans KR", sans-serif;
+    line-height: 1.6;
+  }
+}
 
 @font-face {
     font-family: Amazon Ember;
