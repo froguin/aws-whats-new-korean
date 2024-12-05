@@ -90,7 +90,13 @@ async function invokeNovaLiteSummarization(title, description) {
     }
 
     const parsedResponse = JSON.parse(decodedResponseBody); // JSON 파싱
-    return parseModelResponse(parsedResponse.content[0].text);
+
+    // parsedResponse.content가 정의되어 있는지 확인
+    if (!parsedResponse.content || !Array.isArray(parsedResponse.content) || parsedResponse.content.length === 0) {
+      throw new Error('유효한 content가 응답에 포함되어 있지 않습니다.');
+    }
+
+    return parseModelResponse(parsedResponse.content[0].text); // 안전하게 접근
   } catch (error) {
     console.error('Nova 모델 호출 중 오류:', error);
     throw error;
