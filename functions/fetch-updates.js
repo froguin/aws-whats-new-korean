@@ -172,11 +172,10 @@ async function processItem(item) {
       pubDate: itemPubDate
     };
 
-    // 처리된 아이템을 반환
-    return newItem; 
+    return newItem;
   } catch (error) {
-    console.error('아이템 처리 중 오류:', error);
-    return null; // 오류 발생 시 null 반환
+    console.error(`아이템 처리 중 오류 (GUID: ${itemGuid}):`, error);
+    return null;
   }
 }
 
