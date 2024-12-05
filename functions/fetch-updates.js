@@ -6,7 +6,7 @@ const CACHE_KEY = 'aws-updates-v2';
 const CACHE_TTL_DAY = 7; // 7일간 정보 유지
 const MAX_ITEMS_TO_PROCESS = 3; // 최대 처리할 항목 수
 
-// 클라이언트를 최상위 범위에서 생성
+// AWS Bedrock 클라이언트 초기화
 const bedrockClient = new BedrockRuntimeClient({
   region: process.env.CUSTOM_AWS_REGION,
   credentials: {
@@ -15,60 +15,18 @@ const bedrockClient = new BedrockRuntimeClient({
   }
 });
 
-// Claude 모델을 사용한 요약 및 번역 함수
-async function invokeClaudeSummarization(title, description) {
-  const prompt = generateSystemPrompt(title, description);
-
-  const params = {
-    modelId: 'us.anthropic.claude-3-5-haiku-20241022-v1:0',
-    contentType: 'application/json',
-    accept: 'application/json',
-    body: JSON.stringify({
-      anthropic_version: "bedrock-2023-05-31",
-      max_tokens: 1000,
-      messages: [
-        {
-          role: "user",
-          content: prompt
-        }
-      ]
-    })
-  };
-
-  try {
-    const command = new InvokeModelCommand(params);
-    const response = await bedrockClient.send(command);
-    const decodedResponseBody = new TextDecoder().decode(response.body);
-    const parsedResponse = JSON.parse(decodedResponseBody);
-    
-    return parseModelResponse(parsedResponse.content[0].text);
-  } catch (error) {
-    console.error('Claude 모델 호출 중 오류:', error);
-    throw error;
-  }
-}
-
+// Nova Lite 모델을 사용한 요약 및 번역 함수
 async function invokeNovaLiteSummarization(title, description) {
   const systemPrompt = generateSystemPrompt();
   const userPrompt = `Title: ${title}\nDescription: ${description}`;
-  
   const params = {
     modelId: 'us.amazon.nova-lite-v1:0',
     contentType: 'application/json',
     accept: 'application/json',
     body: JSON.stringify({
       schemaVersion: "messages-v1",
-      messages: [
-        {
-          role: "user",
-          content: [{ text: userPrompt }]
-        }
-      ],
-      system: [
-        {
-          text: systemPrompt
-        }
-      ],
+      messages: [{ role: "user", content: [{ text: userPrompt }] }],
+      system: [{ text: systemPrompt }],
       inferenceConfig: {
         max_new_tokens: 1000,
         top_p: 0.9,
@@ -82,91 +40,33 @@ async function invokeNovaLiteSummarization(title, description) {
     const command = new InvokeModelCommand(params);
     const response = await bedrockClient.send(command);
     const decodedResponseBody = new TextDecoder().decode(response.body);
-
-    console.log('응답 본문:', decodedResponseBody); // 응답 본문 로그 출력
-
-    // 응답 본문이 비어 있지 않은지 확인
-    if (!decodedResponseBody) {
-      throw new Error('응답 본문이 비어 있습니다.');
-    }
-
+    if (!decodedResponseBody) throw new Error('응답 본문이 비어 있습니다.');
     const parsedResponse = JSON.parse(decodedResponseBody);
-
-    // 응답 구조에 맞게 수정
     if (!parsedResponse.output || !parsedResponse.output.message || !Array.isArray(parsedResponse.output.message.content) || parsedResponse.output.message.content.length === 0) {
       throw new Error('유효한 content가 응답에 포함되어 있지 않습니다.');
     }
-
-    // 응답에서 JSON 문자열 추출
     const jsonString = parsedResponse.output.message.content[0].text;
-
-    // JSON 파싱
-    let summaryData;
-    try {
-      summaryData = JSON.parse(jsonString);
-    } catch (error) {
-      throw new Error('JSON 파싱 오류: ' + error.message);
-    }
-
-    // summaryData에서 필요한 정보 추출
-    return parseModelResponse(summaryData); // summaryData를 사용하여 파싱
+    return parseModelResponse(JSON.parse(jsonString));
   } catch (error) {
     console.error('Nova 모델 호출 중 오류:', error);
     throw error;
   }
 }
 
-// Claude 응답 파싱 함수
-function parseModelResponse(responseText) {
-  try {
-    // 응답에서 내부 JSON 블록 찾기
-    const responseString = typeof responseText === 'string' ? responseText : JSON.stringify(responseText);
-    
-    const jsonStart = responseString.indexOf('{', responseString.indexOf('"title"'));
-    const jsonEnd = responseString.lastIndexOf('}');
-    const jsonString = responseString.substring(jsonStart, jsonEnd + 1);
-
-    // 불필요한 문자 정리
-    const cleanedJson = jsonString
-      .replace(/\\n/g, ' ')          // 줄바꿈 제거
-      .replace(/\\t/g, ' ')          // 탭 제거
-      .replace(/\s{2,}/g, ' ')       // 중복 공백 제거
-      .replace(/\\\\"/g, '"')        // 이중 이스케이프된 따옴표 제거
-      .replace(/\\'/g, "'")          // 이스케이프된 작은따옴표 제거
-      .trim();
-
-    // JSON 파싱
-    const parsedResponse = JSON.parse(cleanedJson);
-
-    // content 필드에 중첩된 JSON이 있다면 추가로 파싱 시도
-    if (typeof parsedResponse.content === 'string' && parsedResponse.content.startsWith('{')) {
-      try {
-        parsedResponse.content = JSON.parse(parsedResponse.content);
-      } catch (contentError) {
-        console.warn('content 파싱 실패:', contentError);
-      }
-    }
-    
-    return {
-      title: parsedResponse.title || '제목 없음',
-      summary: parsedResponse.summary || '내용 없음',
-      target: parsedResponse.target || "모든 AWS 사용자",
-      features: parsedResponse.features || "자세한 내용은 원문을 참조하세요",
-      regions: parsedResponse.regions || "지원 리전 정보 없음",
-      status: parsedResponse.status || "알 수 없음"
-    };
-  } catch (error) {
-    console.error('JSON 파싱 오류:', error);
-    // 기본 폴백 응답
-    return {
-      title: '파싱 오류 발생',
-      summary: responseText
-    };
-  }
+// 모델 응답 파싱 함수
+function parseModelResponse(response) {
+  return {
+    title: response.title || '제목 없음',
+    summary: response.summary || '내용 없음',
+    target: response.target || "모든 AWS 사용자",
+    features: response.features || "자세한 내용은 원문을 참조하세요",
+    regions: response.regions || "지원 리전 정보 없음",
+    status: response.status || "알 수 없음"
+  };
 }
 
 // 시스템 프롬프트 생성 함수
-function generateSystemPrompt(title, description) {
+function generateSystemPrompt() {
   return `
 You are an expert in analyzing AWS service updates and providing concise, structured summaries for Korean-speaking AWS users.
 
@@ -200,101 +100,73 @@ Please provide a **single-line JSON-formatted response** with the following stru
   "regions": "모든 AWS 리전",
   "status": "정식 출시"
 }
-`;
+  `;
 }
 
 // 캐시 저장 함수
 async function saveCache(store, items) {
-  const cacheData = {
-    timestamp: new Date().toISOString(),
-    items: items
-  };
+  const cacheData = { timestamp: new Date().toISOString(), items };
   await store.set(CACHE_KEY, JSON.stringify(cacheData));
 }
 
-// 전역 변수로 store 선언
-let store;
-
 // 아이템 처리 함수
-async function processItem(item, processedItems, existingItemsSet) {
-  const itemGuid = item.guid ? String(item.guid) : 'unknown-guid'; // guid가 없을 경우 기본값 설정
-  const itemPubDate = new Date(item.published).toISOString(); // pubDate를 ISO 문자열로 변환
+async function processItem(item, processedItems, existingItemsSet, store) {
+  const itemGuid = item.guid || 'unknown-guid'; // RSS 피드에서 guid 가져오기
+  const itemPubDate = new Date(item.pubDate).toISOString(); // pubDate를 ISO 문자열로 변환
 
-  // 기존 아이템과 비교하여 새로운 아이템인지 확인
   if (!existingItemsSet.has(`${itemGuid}|${itemPubDate}`)) {
     try {
       console.log('처리 시작:', item.title.substring(0, 30) + '...');
       const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
       console.log('처리 완료:', item.title.substring(0, 30) + '...');
 
-      // 새로운 아이템을 맨 앞에 추가
       const newItem = {
         title: summaryResponse.title,
-        date: new Date(item.published).toLocaleDateString('ko-KR', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        }),
+        date: new Date(item.pubDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }),
         content: summaryResponse.summary,
-        target: summaryResponse.target || "모든 AWS 사용자",
-        features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
-        regions: summaryResponse.regions || "지원 리전 정보 없음",
-        status: summaryResponse.status || "일반 공개",
+        target: summaryResponse.target,
+        features: summaryResponse.features,
+        regions: summaryResponse.regions,
+        status: summaryResponse.status,
         originalLink: item.link || '',
-        guid: itemGuid, // RSS 피드에서 가져온 guid 사용
-        pubDate: itemPubDate // pubDate를 ISO 문자열로 저장
+        guid: itemGuid,
+        pubDate: itemPubDate
       };
 
-      // 새로운 아이템을 맨 앞에 추가
       processedItems.unshift(newItem);
-
-      // 아이템 처리 후 캐시 저장
       await saveCache(store, processedItems);
-
-      // 캐시 저장 후 로그 출력
-      console.log('캐시 저장 완료:', JSON.stringify(processedItems, null, 2)); // 이 부분은 삭제하지 않음
-
-      return true; // 처리 성공
+      console.log('캐시 저장 완료:', newItem.title);
+      return true;
     } catch (error) {
       console.error('아이템 처리 중 오류:', error);
-      return false; // 처리 실패
+      return false;
     }
   } else {
     console.log(`기존 아이템 ${itemGuid} (${item.title})는 이미 처리되었습니다.`);
-    return false; // 이미 처리된 아이템
+    return false;
   }
 }
 
-// RSS 피드에서 최근 아이템 필터링 함수
+// 최근 아이템 필터링 함수
 function filterRecentItems(rssItems) {
   const oneWeekAgo = new Date();
-  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-  return rssItems.filter(item => new Date(item.published) >= oneWeekAgo);
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - CACHE_TTL_DAY);
+  return rssItems.filter(item => new Date(item.pubDate) >= oneWeekAgo);
 }
 
+// Lambda 핸들러 함수
 export const handler = async () => {
   try {
     console.log('=== Function started ===');
     
-    // 환경변수 체크
-    const requiredEnvVars = [
-      'CUSTOM_AWS_ACCESS_KEY', 
-      'CUSTOM_AWS_SECRET_KEY', 
-      'CUSTOM_AWS_REGION', 
-      'NETLIFY_SITE_ID', 
-      'NETLIFY_ACCESS_TOKEN'
-    ];
-    
+    // 환경 변수 확인
+    const requiredEnvVars = ['CUSTOM_AWS_ACCESS_KEY', 'CUSTOM_AWS_SECRET_KEY', 'CUSTOM_AWS_REGION', 'NETLIFY_SITE_ID', 'NETLIFY_ACCESS_TOKEN'];
     requiredEnvVars.forEach(varName => {
-      if (!process.env[varName]) {
-        throw new Error(`Required environment variable ${varName} is missing`);
-      }
+      if (!process.env[varName]) throw new Error(`Required environment variable ${varName} is missing`);
     });
 
-    console.log('환경변수 확인 완료');
-
     // Blob 스토어 초기화
-    store = getStore({
+    const store = getStore({
       name: "aws-updates-store",
       siteID: process.env.NETLIFY_SITE_ID,
       token: process.env.NETLIFY_ACCESS_TOKEN
@@ -303,62 +175,34 @@ export const handler = async () => {
     // 캐시에서 기존 데이터 가져오기
     const cachedData = await store.get(CACHE_KEY);
     const processedItems = cachedData ? JSON.parse(cachedData).items : [];
-
-    console.log(`가져온 아이템 수: ${processedItems.length}`); // 가져온 아이템 수 로그 출력
-
-    // 기존 아이템의 guid와 pubDate를 Set으로 저장
+    
+    // 기존 아이템 Set 생성
     const existingItemsSet = new Set(processedItems.map(item => `${item.guid}|${item.pubDate}`));
-    console.log('기존 아이템 Set:', existingItemsSet);
 
-    // RSS 피드 가져오기
+    // RSS 피드 가져오기 및 필터링
     const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
-    console.log('전체 RSS 항목 수:', rss.items.length);
-
     const recentItems = filterRecentItems(rss.items);
-    console.log('일주일 이내 항목 수:', recentItems.length);
 
-    // 업데이트가 필요한 항목 수
-    let updateCount = 0;
-
-    // 업데이트가 필요한 항목 수 세기
+    let processedCount = 0;
+    
     for (const item of recentItems) {
-      const itemGuid = item.guid.__text; // RSS 피드에서 guid 가져오기
-      const itemPubDate = new Date(item.pubDate).toISOString(); // pubDate를 ISO 문자열로 변환
-
-      // 기존 아이템과 비교하여 새로운 아이템인지 확인
-      if (!existingItemsSet.has(`${itemGuid}|${itemPubDate}`)) {
-        updateCount++; // 업데이트가 필요한 항목 수 증가
+      if (await processItem(item, processedItems, existingItemsSet, store)) {
+        processedCount++;
+        if (processedCount >= MAX_ITEMS_TO_PROCESS) break;
       }
     }
 
-    console.log(`업데이트가 필요한 항목 수: ${updateCount}`);
-
-    // 업데이트가 필요한 항목만 처리 (최대 3개)
-    if (updateCount > 0) {
-      let processedCount = 0; // 처리한 항목 수 카운터
-      for (const item of recentItems) {
-        if (await processItem(item, processedItems, existingItemsSet)) {
-          processedCount++; // 처리한 항목 수 증가
-          if (processedCount >= MAX_ITEMS_TO_PROCESS) break; // 최대 처리 수에 도달하면 종료
-        }
-      }
-    }
-
-    // 캐시에서 pubDate 기준으로 내림차순 정렬
+    // 캐시 정리 및 저장
     processedItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
-
-    // 캐시에서 7일이 지난 아이템 삭제
+    
     const currentTime = Date.now();
-    const filteredItems = processedItems.filter(item => {
-      const itemTime = new Date(item.date).getTime();
-      return (currentTime - itemTime) < (CACHE_TTL_DAY * 24 * 60 * 60); // CACHE_TTL_DAY를 초 단위로 변환
-    });
-
-    // 최종 캐시 저장
+    const filteredItems = processedItems.filter(item => (currentTime - new Date(item.date).getTime()) < (CACHE_TTL_DAY * 24 * 60 * 60 * 1000));
+    
     await saveCache(store, filteredItems);
 
-    console.log('=== New items processed ===');
+    console.log(`처리된 새 아이템 수: ${processedCount}`);
+    
   } catch (error) {
-    console.error('Error processing new items:', error);
+    console.error('Error in handler:', error);
   }
 };
