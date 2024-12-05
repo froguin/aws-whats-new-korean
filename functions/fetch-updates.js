@@ -257,19 +257,27 @@ export const handler = async () => {
       }
 
     // 캐시 정리 및 저장
-    processedItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
-      const currentTime = Date.now();
-      const filteredItems = processedItems.filter(item => {
+    const currentTime = Date.now();
+    // 마지막으로 저장된 캐시를 다시 읽어들임
+    const cachedData = await store.get(CACHE_KEY);
+    let processedItems = cachedData ? JSON.parse(cachedData).items : []; // processedItems 초기화
+
+    const filteredItems = processedItems.filter(item => {
         const itemTime = new Date(item.pubDate).getTime();
-        return (currentTime - itemTime) < (CACHE_TTL_DAY * 24 * 60 * 60 * 1000);
-      });
+        return (currentTime - itemTime) < (CACHE_TTL_DAY * 24 * 60 * 60 * 1000); // 7일보다 큰 경우 제거
+    });
 
-    // 필터링된 항목을 저장
-    await saveCache(store, filteredItems);
+    // GUID와 pubDate가 같은 아이템 중복 제거
+    const uniqueItems = Array.from(new Set(filteredItems.map(item => `${item.guid}|${item.pubDate}`)))
+        .map(guid => filteredItems.find(item => `${item.guid}|${item.pubDate}` === guid));
+
+    // pubDate 기준으로 최신 정보가 맨 앞에 오도록 정렬
+    uniqueItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+
+    // 정리한 내용을 캐시에 저장
+    await saveCache(store, uniqueItems);
+    console.log(`총 캐시된 아이템 수: ${uniqueItems.length}`);
     console.log(`처리된 새 아이템 수: ${processedCount}`);
-    console.log(`총 캐시된 아이템 수: ${filteredItems.length}`);
-    }
-
     console.log('=== Function completed ===');
   } catch (error) {
     console.error('Error in handler:', error);
