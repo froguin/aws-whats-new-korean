@@ -3,7 +3,8 @@ import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedroc
 import { getStore } from "@netlify/blobs";
 
 const CACHE_KEY = 'aws-updates-v2';
-const CACHE_TTL = 600; // 10분 캐시
+const CACHE_TTL_DAY = 7; // 7일간 정보 유지
+const MAX_ITEMS_TO_PROCESS = 3; // 최대 처리할 항목 수
 
 // 클라이언트를 최상위 범위에서 생성
 const bedrockClient = new BedrockRuntimeClient({
@@ -208,9 +209,8 @@ async function saveCache(store, items) {
     timestamp: new Date().toISOString(),
     items: items
   };
-  await store.set(CACHE_KEY, JSON.stringify(cacheData), { ttl: CACHE_TTL });
+  await store.set(CACHE_KEY, JSON.stringify(cacheData));
 }
-
 
 // 아이템 처리 함수
 async function processItem(item, processedItems, existingItemsSet) {
@@ -318,13 +318,13 @@ export const handler = async () => {
 
     console.log(`업데이트가 필요한 항목 수: ${updateCount}`);
 
-    // 업데이트가 필요한 항목만 처리 (최대 7개)
+    // 업데이트가 필요한 항목만 처리 (최대 3개)
     if (updateCount > 0) {
       let processedCount = 0; // 처리한 항목 수 카운터
       for (const item of recentItems) {
         if (await processItem(item, processedItems, existingItemsSet)) {
           processedCount++; // 처리한 항목 수 증가
-          if (processedCount >= 7) break; // 7개 처리 후 종료
+          if (processedCount >= MAX_ITEMS_TO_PROCESS) break; // 최대 처리 수에 도달하면 종료
         }
       }
     }
@@ -336,7 +336,7 @@ export const handler = async () => {
     const currentTime = Date.now();
     const filteredItems = processedItems.filter(item => {
       const itemTime = new Date(item.date).getTime();
-      return (currentTime - itemTime) < (7 * 24 * 60 * 60 * 1000); // 7일 기준
+      return (currentTime - itemTime) < (CACHE_TTL_DAY * 24 * 60 * 60); // CACHE_TTL_DAY를 초 단위로 변환
     });
 
     // 최종 캐시 저장
