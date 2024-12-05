@@ -217,7 +217,8 @@ let store;
 
 // 아이템 처리 함수
 async function processItem(item, processedItems, existingItemsSet) {
-  const itemGuid = item.guid ? String(item.guid) : 'unknown-guid'; // guid가 없을 경우 기본값 설정
+  // RSS 피드에서 guid 값을 가져오기
+  const itemGuid = item.guid && item.guid.__text ? String(item.guid.__text) : 'unknown-guid'; // guid가 없을 경우 기본값 설정
   const itemPubDate = new Date(item.published).toISOString(); // pubDate를 ISO 문자열로 변환
 
   // 기존 아이템과 비교하여 새로운 아이템인지 확인
