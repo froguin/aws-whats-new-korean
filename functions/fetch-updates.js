@@ -148,6 +148,7 @@ let store;
 
 async function processItem(item) {
   const itemGuid = item.guid;
+  console.log('아이템 GUID:', itemGuid);
   const itemPubDate = new Date(item.published).toISOString();
 
   try {
