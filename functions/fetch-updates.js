@@ -81,14 +81,16 @@ async function invokeNovaLiteSummarization(title, description) {
     const command = new InvokeModelCommand(params);
     const response = await bedrockClient.send(command);
     const decodedResponseBody = new TextDecoder().decode(response.body);
-    const parsedResponse = JSON.parse(decodedResponseBody);
-    let fullResponse = '';
 
-    if (parsedResponse.contentBlockDelta) {
-      fullResponse += parsedResponse.contentBlockDelta.delta.text;
+    console.log('응답 본문:', decodedResponseBody); // 응답 본문 로그 출력
+
+    // 응답 본문이 비어 있지 않은지 확인
+    if (!decodedResponseBody) {
+      throw new Error('응답 본문이 비어 있습니다.');
     }
 
-    return parseModelResponse(fullResponse);
+    const parsedResponse = JSON.parse(decodedResponseBody); // JSON 파싱
+    return parseModelResponse(parsedResponse.content[0].text);
   } catch (error) {
     console.error('Nova 모델 호출 중 오류:', error);
     throw error;
