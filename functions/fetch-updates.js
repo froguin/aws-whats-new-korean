@@ -184,6 +184,22 @@ function filterRecentItems(rssItems) {
   return rssItems.filter(item => new Date(item.published) >= anAgo);
 }
 
+async function getCachedDataWithRetry(store, key, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const cachedData = await store.get(key);
+      return cachedData; // 성공적으로 데이터를 가져오면 반환
+    } catch (error) {
+      console.error(`캐시 데이터 가져오기 실패 (시도 ${attempt + 1}):`, error);
+      if (attempt === retries - 1) {
+        throw new Error('최대 재시도 횟수 초과'); // 최대 재시도 횟수 초과 시 오류 발생
+      }
+      // 잠시 대기 후 재시도
+      await new Promise(resolve => setTimeout(resolve, 200)); // 200ms 대기
+    }
+  }
+}
+
 export const handler = async () => {
   try {
     console.log('=== Function started ===');
@@ -203,7 +219,7 @@ export const handler = async () => {
       token: process.env.NETLIFY_ACCESS_TOKEN
     });
     // 캐시에서 기존 데이터 가져오기
-    let cachedData = await store.get(CACHE_KEY);
+    let cachedData = await getCachedDataWithRetry(store, CACHE_KEY);
     let processedItems = cachedData ? JSON.parse(cachedData).items : [];
     console.log(`가져온 아이템 수: ${processedItems.length}`);
 
