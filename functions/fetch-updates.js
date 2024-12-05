@@ -234,6 +234,44 @@ export const handler = async () => {
     const cachedData = await store.get(CACHE_KEY);
     const processedItems = cachedData ? JSON.parse(cachedData).items : [];
 
+    // 캐시된 데이터 반환
+    const response = {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      },
+      body: JSON.stringify({
+        items: processedItems,
+        meta: {
+          isCached: true,
+          lastUpdated: cachedData ? JSON.parse(cachedData).timestamp : null,
+          itemCount: processedItems.length
+        }
+      })
+    };
+
+    // 비동기로 추가 아이템 처리
+    processNewItems(store, processedItems);
+
+    return response;
+  } catch (error) {
+    console.error('Function error:', error.message);
+    console.error('Error stack:', error.stack);
+    
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ 
+        error: '서버 오류가 발생했습니다',
+        details: error.message 
+      })
+    };
+  }
+};
+
+// 비동기로 새로운 아이템 처리하는 함수
+async function processNewItems(store, processedItems) {
+  try {
     // RSS 피드 가져오기
     const rss = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
     console.log('전체 RSS 항목 수:', rss.items.length);
@@ -243,10 +281,16 @@ export const handler = async () => {
     const recentItems = rss.items.filter(item => new Date(item.published) >= oneWeekAgo);
     console.log('일주일 이내 항목 수:', recentItems.length);
 
-    // 기존 아이템과 새로 추가된 아이템을 비교하여 invoke 처리
-    const existingTitles = new Set(processedItems.map(item => item.title));
+    // 기존 아이템의 guid와 pubDate를 Set으로 저장
+    const existingItemsSet = new Set(processedItems.map(item => `${item.guid}|${item.pubDate}`));
+
+    // 최근 아이템을 하나씩 처리
     for (const item of recentItems) {
-      if (!existingTitles.has(item.title)) {
+      const itemGuid = item.guid; // RSS 피드에서 guid 가져오기
+      const itemPubDate = item.published; // RSS 피드에서 pubDate 가져오기
+
+      // 기존 아이템과 비교하여 새로운 아이템인지 확인
+      if (!existingItemsSet.has(`${itemGuid}|${itemPubDate}`)) {
         try {
           console.log('처리 시작:', item.title.substring(0, 30) + '...');
           const summaryResponse = await invokeNovaLiteSummarization(item.title, item.description);
@@ -265,7 +309,9 @@ export const handler = async () => {
             features: summaryResponse.features || "자세한 내용은 원문을 참조하세요",
             regions: summaryResponse.regions || "지원 리전 정보 없음",
             status: summaryResponse.status || "일반 공개",
-            originalLink: item.link || ''
+            originalLink: item.link || '',
+            guid: itemGuid, // guid 추가
+            pubDate: itemPubDate // pubDate 추가
           });
 
           // 캐시 저장
@@ -295,32 +341,8 @@ export const handler = async () => {
     };
     await store.set(CACHE_KEY, JSON.stringify(finalCacheData), { ttl: CACHE_TTL });
 
-    console.log('=== Function completed ===');
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      },
-      body: JSON.stringify({
-        items: filteredItems,
-        meta: {
-          isCached: true,
-          lastUpdated: finalCacheData.timestamp,
-          itemCount: filteredItems.length
-        }
-      })
-    };
+    console.log('=== New items processed ===');
   } catch (error) {
-    console.error('Function error:', error.message);
-    console.error('Error stack:', error.stack);
-    
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ 
-        error: '서버 오류가 발생했습니다',
-        details: error.message 
-      })
-    };
+    console.error('Error processing new items:', error);
   }
 };
