@@ -240,7 +240,7 @@ export const handler = async () => {
     processedItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
       const currentTime = Date.now();
       const filteredItems = processedItems.filter(item => {
-        const itemTime = new Date(item.date).getTime();
+        const itemTime = new Date(item.pubDate).getTime();
         return (currentTime - itemTime) < (CACHE_TTL_DAY * 24 * 60 * 60 * 1000);
       });
 
