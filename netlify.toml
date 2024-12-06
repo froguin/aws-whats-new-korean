@@ -26,3 +26,6 @@
 
 [[blobs.stores]]
 name = "aws-updates"
+
+[functions."fetch-updates"]
+  schedule = "0 * * * *"
