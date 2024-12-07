@@ -60,6 +60,17 @@ try {
         </div>
       </div>
     )}
+
+    {/* 검색 입력란 추가 */}
+    <div class="mb-6">
+      <input 
+        type="text" 
+        id="search-input" 
+        placeholder="업데이트 검색..." 
+        class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+    </div>
+
     {errorMessage ? (
       <div class="rounded-md bg-red-50 p-4 my-4">
         <div class="flex">
@@ -72,7 +83,7 @@ try {
         </div>
       </div>
     ) : (
-      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 my-6">
+      <div id="updates-grid" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 my-6">
         {updates.length > 0 ? (
           updates.map((update) => (
             <UpdateCard {...update} />
@@ -85,4 +96,41 @@ try {
       </div>
     )}
   </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const searchInput = document.getElementById('search-input');
+      const updatesGrid = document.getElementById('updates-grid');
+      const updateCards = updatesGrid?.querySelectorAll('update-card');
+
+      searchInput?.addEventListener('input', (e) => {
+        const searchTerm = (e.target as HTMLInputElement).value.toLowerCase();
+        
+        updateCards?.forEach((card) => {
+          const cardContent = card.textContent?.toLowerCase() || '';
+          
+          if (cardContent.includes(searchTerm)) {
+            card.classList.remove('hidden');
+          } else {
+            card.classList.add('hidden');
+          }
+        });
+
+        // 검색 결과가 없을 때 메시지 표시
+        const visibleCards = updatesGrid?.querySelectorAll('update-card:not(.hidden)');
+        const noResultsMessage = updatesGrid?.querySelector('.no-results-message');
+
+        if (visibleCards?.length === 0) {
+          if (!noResultsMessage) {
+            const message = document.createElement('div');
+            message.classList.add('col-span-full', 'text-center', 'py-12', 'no-results-message');
+            message.innerHTML = `<p class="text-gray-500">검색 결과가 없습니다.</p>`;
+            updatesGrid?.appendChild(message);
+          }
+        } else {
+          noResultsMessage?.remove();
+        }
+      });
+    });
+  </script>
 </Layout>
