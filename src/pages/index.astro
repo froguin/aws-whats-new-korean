@@ -60,17 +60,6 @@ try {
         </div>
       </div>
     )}
-
-    {/* 검색 입력란 추가 */}
-    <div class="mb-6">
-      <input 
-        type="text" 
-        id="search-input" 
-        placeholder="업데이트 검색..." 
-        class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-    </div>
-
     {errorMessage ? (
       <div class="rounded-md bg-red-50 p-4 my-4">
         <div class="flex">
@@ -83,7 +72,7 @@ try {
         </div>
       </div>
     ) : (
-      <div id="updates-grid" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 my-6">
+      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 my-6">
         {updates.length > 0 ? (
           updates.map((update) => (
             <UpdateCard {...update} />
@@ -96,63 +85,4 @@ try {
       </div>
     )}
   </div>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const searchInput = document.getElementById('search-input') as HTMLInputElement;
-      const updatesGrid = document.getElementById('updates-grid');
-      
-      // Ensure the input and grid exist
-      if (!searchInput || !updatesGrid) return;
-
-      // Function to perform search
-      const performSearch = () => {
-        const searchTerm = searchInput.value.trim().toLowerCase();
-        const updateCards = updatesGrid.querySelectorAll('update-card');
-        
-        // Track visible cards
-        let visibleCardsCount = 0;
-
-        // Iterate through cards and filter
-        updateCards.forEach((card) => {
-          // Convert card to element to access textContent
-          const cardElement = card as HTMLElement;
-          const cardContent = cardElement.textContent?.toLowerCase() || '';
-          
-          // Check if search term is in card content
-          if (searchTerm === '' || cardContent.includes(searchTerm)) {
-            cardElement.classList.remove('hidden');
-            visibleCardsCount++;
-          } else {
-            cardElement.classList.add('hidden');
-          }
-        });
-
-        // Handle no results scenario
-        const existingNoResultsMessage = updatesGrid.querySelector('.no-results-message');
-        
-        if (visibleCardsCount === 0) {
-          // If no results message doesn't exist, create it
-          if (!existingNoResultsMessage) {
-            const message = document.createElement('div');
-            message.classList.add('col-span-full', 'text-center', 'py-12', 'no-results-message');
-            message.innerHTML = `<p class="text-gray-500">검색 결과가 없습니다.</p>`;
-            updatesGrid.appendChild(message);
-          }
-        } else {
-          // Remove no results message if it exists and there are results
-          existingNoResultsMessage?.remove();
-        }
-      };
-
-      // Add event listeners for both input and enter key
-      searchInput.addEventListener('input', performSearch);
-      searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault(); // Prevent form submission
-          performSearch();
-        }
-      });
-    });
-  </script>
 </Layout>
