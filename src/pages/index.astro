@@ -99,36 +99,58 @@ try {
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      const searchInput = document.getElementById('search-input');
+      const searchInput = document.getElementById('search-input') as HTMLInputElement;
       const updatesGrid = document.getElementById('updates-grid');
-      const updateCards = updatesGrid?.querySelectorAll('update-card');
+      
+      // Ensure the input and grid exist
+      if (!searchInput || !updatesGrid) return;
 
-      searchInput?.addEventListener('input', (e) => {
-        const searchTerm = (e.target as HTMLInputElement).value.toLowerCase();
+      // Function to perform search
+      const performSearch = () => {
+        const searchTerm = searchInput.value.trim().toLowerCase();
+        const updateCards = updatesGrid.querySelectorAll('update-card');
         
-        updateCards?.forEach((card) => {
-          const cardContent = card.textContent?.toLowerCase() || '';
+        // Track visible cards
+        let visibleCardsCount = 0;
+
+        // Iterate through cards and filter
+        updateCards.forEach((card) => {
+          // Convert card to element to access textContent
+          const cardElement = card as HTMLElement;
+          const cardContent = cardElement.textContent?.toLowerCase() || '';
           
-          if (cardContent.includes(searchTerm)) {
-            card.classList.remove('hidden');
+          // Check if search term is in card content
+          if (searchTerm === '' || cardContent.includes(searchTerm)) {
+            cardElement.classList.remove('hidden');
+            visibleCardsCount++;
           } else {
-            card.classList.add('hidden');
+            cardElement.classList.add('hidden');
           }
         });
 
-        // 검색 결과가 없을 때 메시지 표시
-        const visibleCards = updatesGrid?.querySelectorAll('update-card:not(.hidden)');
-        const noResultsMessage = updatesGrid?.querySelector('.no-results-message');
-
-        if (visibleCards?.length === 0) {
-          if (!noResultsMessage) {
+        // Handle no results scenario
+        const existingNoResultsMessage = updatesGrid.querySelector('.no-results-message');
+        
+        if (visibleCardsCount === 0) {
+          // If no results message doesn't exist, create it
+          if (!existingNoResultsMessage) {
             const message = document.createElement('div');
             message.classList.add('col-span-full', 'text-center', 'py-12', 'no-results-message');
             message.innerHTML = `<p class="text-gray-500">검색 결과가 없습니다.</p>`;
-            updatesGrid?.appendChild(message);
+            updatesGrid.appendChild(message);
           }
         } else {
-          noResultsMessage?.remove();
+          // Remove no results message if it exists and there are results
+          existingNoResultsMessage?.remove();
+        }
+      };
+
+      // Add event listeners for both input and enter key
+      searchInput.addEventListener('input', performSearch);
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault(); // Prevent form submission
+          performSearch();
         }
       });
     });
