@@ -273,16 +273,21 @@ export const handler = async () => {
       return (currentTime - itemTime) < (CACHE_TTL_DAY * 24 * 60 * 60 * 1000); // 7일보다 큰 경우 제거
     });
 
+    console.log(`최근 items 필터 수: ${filteredItems.length}`); // filteredItems 길이 로그
+
     // id와 pubDate가 같은 아이템 중복 제거
     const uniqueItems = Array.from(new Set(filteredItems.map(item => `${item.id}|${item.pubDate}`)))
       .map(id => filteredItems.find(item => `${item.id}|${item.pubDate}` === id));
 
-      // pubDate 기준으로 최신 정보가 맨 앞에 오도록 정렬
+    console.log(`중복 제거된 items 수: ${uniqueItems.length}`); // uniqueItems 길이 로그
+
+    // pubDate 기준으로 최신 정보가 맨 앞에 오도록 정렬
     uniqueItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
     // 캐시 정리 및 저장 조건: filteredItems와 processedItems의 카운트가 다르거나 filteredItems에 중복이 있을 경우
     let isCached = true; // 기본값을 true로 설정
     if (uniqueItems.length !== filteredItems.length || uniqueItems.length !== processedItems.length) {
+      console.log(`캐시 저장 조건 충족: uniqueItems.length = ${uniqueItems.length}, filteredItems.length = ${filteredItems.length}, processedItems.length = ${processedItems.length}`);
       // 정리한 내용을 캐시에 저장
       await saveCache(store, uniqueItems);
       isCached = false; // saveCache를 호출한 경우 isCached를 false로 설정
