@@ -13,56 +13,46 @@ interface Props {
 const { title, date, content, target, features, regions, status, originalLink } = Astro.props;
 ---
 
-<article class="bg-white rounded-lg border border-[var(--color-border-container-default)] shadow-sm hover:shadow-md transition-all">
-  <div class="p-[var(--space-scaled-l)]">
-    <div class="flex items-center justify-between mb-[var(--space-scaled-m)]">
-      <time datetime={date} class="text-[var(--font-size-body-m)] text-[var(--color-text-body-default)]">
-        {date}
-      </time>
-      {status && (
-        <span class="px-[var(--space-scaled-s)] py-[var(--space-scaled-xs)] rounded-[var(--border-radius-badge)] text-xs bg-[var(--color-background-container-content)] border border-[var(--color-border-container-default)]">
-          {status}
-        </span>
-      )}
+<article class="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden">
+  <div class="p-6">
+    <div class="flex items-center justify-between mb-4">
+      <time datetime={date} class="text-sm font-medium text-gray-500">{date}</time>
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+        {status}
+      </span>
     </div>
     
-    <h2 class="text-[var(--font-size-heading-m)] font-medium text-[var(--color-text-body-default)] mb-[var(--space-scaled-m)] line-clamp-2 hover:line-clamp-none">
+    <h2 class="text-xl font-bold text-gray-900 mb-4 line-clamp-2 hover:line-clamp-none">
       {title}
     </h2>
     
-    <div class="prose prose-sm text-[var(--color-text-body-default)] mb-[var(--space-scaled-l)]">
+    <div class="prose prose-sm text-gray-600 mb-6">
       <div set:html={content} class="line-clamp-3 hover:line-clamp-none" />
     </div>
 
-    <dl class="grid grid-cols-1 gap-[var(--space-scaled-m)] border-t border-[var(--color-border-container-default)] pt-[var(--space-scaled-m)]">
-      {target && (
-        <div class="grid grid-cols-3 gap-[var(--space-scaled-s)]">
-          <dt class="text-sm font-medium text-[var(--color-text-body-default)]">대상</dt>
-          <dd class="col-span-2 text-sm text-[var(--color-text-body-default)]">{target}</dd>
-        </div>
-      )}
-      {features && (
-        <div class="grid grid-cols-3 gap-[var(--space-scaled-s)]">
-          <dt class="text-sm font-medium text-[var(--color-text-body-default)]">주요 기능</dt>
-          <dd class="col-span-2 text-sm text-[var(--color-text-body-default)]">{features}</dd>
-        </div>
-      )}
-      {regions && (
-        <div class="grid grid-cols-3 gap-[var(--space-scaled-s)]">
-          <dt class="text-sm font-medium text-[var(--color-text-body-default)]">지원 리전</dt>
-          <dd class="col-span-2 text-sm text-[var(--color-text-body-default)]">{regions}</dd>
-        </div>
-      )}
+    <dl class="grid grid-cols-1 gap-4 border-t border-gray-200 pt-4">
+      <div class="sm:grid sm:grid-cols-3 sm:gap-4">
+        <dt class="text-sm font-medium text-gray-500">대상</dt>
+        <dd class="mt-1 text-sm text-gray-900 sm:col-span-2 sm:mt-0">{target}</dd>
+      </div>
+      <div class="sm:grid sm:grid-cols-3 sm:gap-4">
+        <dt class="text-sm font-medium text-gray-500">주요 기능</dt>
+        <dd class="mt-1 text-sm text-gray-900 sm:col-span-2 sm:mt-0">{features}</dd>
+      </div>
+      <div class="sm:grid sm:grid-cols-3 sm:gap-4">
+        <dt class="text-sm font-medium text-gray-500">지원 리전</dt>
+        <dd class="mt-1 text-sm text-gray-900 sm:col-span-2 sm:mt-0">{regions}</dd>
+      </div>
     </dl>
   </div>
 
   {originalLink && (
-    <div class="px-[var(--space-scaled-l)] py-[var(--space-scaled-m)] bg-[var(--color-background-container-content)] border-t border-[var(--color-border-container-default)]">
+    <div class="px-6 py-4 bg-gray-50 border-t border-gray-100">
       <a 
         href={originalLink} 
         target="_blank" 
         rel="noopener noreferrer" 
-        class="inline-flex items-center text-sm font-medium text-[var(--color-text-interactive-default)] hover:underline"
+        class="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800"
       >
         자세히 보기
         <svg class="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
