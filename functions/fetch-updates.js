@@ -4,7 +4,7 @@ import { getStore } from "@netlify/blobs";
 
 const RSS_URL = 'https://aws.amazon.com/about-aws/whats-new/recent/feed/'
 const CACHE_KEY = 'aws-updates-v2';
-const CACHE_TTL_DAY = 7; // 7일간 정보 유지
+const CACHE_TTL_DAY = 30; // 7일간 정보 유지
 const MAX_ITEMS_TO_PROCESS = 30; // 최대 처리할 항목 수
 
 // AWS Bedrock 클라이언트 초기화
