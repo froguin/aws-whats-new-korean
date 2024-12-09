@@ -1,9 +1,4 @@
 ---
-import Container from '@cloudscape-design/components/container';
-import Header from '@cloudscape-design/components/header';
-import SpaceBetween from '@cloudscape-design/components/space-between';
-import Link from '@cloudscape-design/components/link';
-
 interface Props {
   title: string;
   date: string;
@@ -18,39 +13,62 @@ interface Props {
 const { title, date, content, target, features, regions, status, originalLink } = Astro.props;
 ---
 
-<Container>
-  <SpaceBetween size="m">
-    <div>
-      <Header variant="h2">{title}</Header>
-      <div class="text-sm text-aws-gray-600">{date}</div>
+<article class="bg-white rounded-lg border border-[var(--color-border-container-default)] shadow-sm hover:shadow-md transition-all">
+  <div class="p-[var(--space-scaled-l)]">
+    <div class="flex items-center justify-between mb-[var(--space-scaled-m)]">
+      <time datetime={date} class="text-[var(--font-size-body-m)] text-[var(--color-text-body-default)]">
+        {date}
+      </time>
+      {status && (
+        <span class="px-[var(--space-scaled-s)] py-[var(--space-scaled-xs)] rounded-[var(--border-radius-badge)] text-xs bg-[var(--color-background-container-content)] border border-[var(--color-border-container-default)]">
+          {status}
+        </span>
+      )}
     </div>
     
-    <div class="prose prose-sm text-aws-gray-600">
-      <div set:html={content} />
+    <h2 class="text-[var(--font-size-heading-m)] font-medium text-[var(--color-text-body-default)] mb-[var(--space-scaled-m)] line-clamp-2 hover:line-clamp-none">
+      {title}
+    </h2>
+    
+    <div class="prose prose-sm text-[var(--color-text-body-default)] mb-[var(--space-scaled-l)]">
+      <div set:html={content} class="line-clamp-3 hover:line-clamp-none" />
     </div>
 
-    <SpaceBetween size="s">
+    <dl class="grid grid-cols-1 gap-[var(--space-scaled-m)] border-t border-[var(--color-border-container-default)] pt-[var(--space-scaled-m)]">
       {target && (
-        <div>
-          <strong>대상:</strong> {target}
+        <div class="grid grid-cols-3 gap-[var(--space-scaled-s)]">
+          <dt class="text-sm font-medium text-[var(--color-text-body-default)]">대상</dt>
+          <dd class="col-span-2 text-sm text-[var(--color-text-body-default)]">{target}</dd>
         </div>
       )}
       {features && (
-        <div>
-          <strong>주요 기능:</strong> {features}
+        <div class="grid grid-cols-3 gap-[var(--space-scaled-s)]">
+          <dt class="text-sm font-medium text-[var(--color-text-body-default)]">주요 기능</dt>
+          <dd class="col-span-2 text-sm text-[var(--color-text-body-default)]">{features}</dd>
         </div>
       )}
       {regions && (
-        <div>
-          <strong>지원 리전:</strong> {regions}
+        <div class="grid grid-cols-3 gap-[var(--space-scaled-s)]">
+          <dt class="text-sm font-medium text-[var(--color-text-body-default)]">지원 리전</dt>
+          <dd class="col-span-2 text-sm text-[var(--color-text-body-default)]">{regions}</dd>
         </div>
       )}
-    </SpaceBetween>
+    </dl>
+  </div>
 
-    {originalLink && (
-      <Link href={originalLink} external>
+  {originalLink && (
+    <div class="px-[var(--space-scaled-l)] py-[var(--space-scaled-m)] bg-[var(--color-background-container-content)] border-t border-[var(--color-border-container-default)]">
+      <a 
+        href={originalLink} 
+        target="_blank" 
+        rel="noopener noreferrer" 
+        class="inline-flex items-center text-sm font-medium text-[var(--color-text-interactive-default)] hover:underline"
+      >
         자세히 보기
-      </Link>
-    )}
-  </SpaceBetween>
-</Container>
+        <svg class="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+        </svg>
+      </a>
+    </div>
+  )}
+</article>
