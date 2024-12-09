@@ -126,21 +126,24 @@ Please provide a **single-line JSON-formatted response** with the following stru
 }
 
 // 캐시 저장 함수
-async function saveCache(store, items) {
-  const cachedData = await store.get(CACHE_KEY);
-  const existingItems = cachedData ? JSON.parse(cachedData).items : []; // 기존 아이템 읽기
+async function saveCache(store, items, mergeWithExisting = false) {
+  let combinedItems;
 
-  // 기존 아이템과 새로운 아이템을 결합
-  const combinedItems = [...existingItems, ...items];
-
-  // id 기반으로 중복 제거
-  const uniqueItems = Array.from(new Set(combinedItems.map(item => item.id)))
-      .map(id => combinedItems.find(item => item.id === id)); // id에 해당하는 아이템 찾기
+  if (mergeWithExisting) {
+    const cachedData = await store.get(CACHE_KEY);
+    const existingItems = cachedData ? JSON.parse(cachedData).items : [];
+    
+    // 기존 아이템과 새로운 아이템을 결합
+    combinedItems = [...existingItems, ...items];
+  } else {
+    // 주어진 아이템만 저장
+    combinedItems = items;
+  }
 
   // 캐시 데이터 저장
   await store.set(CACHE_KEY, JSON.stringify({
-      timestamp: new Date().toISOString(),
-      items: uniqueItems // 최종 아이템 저장
+    timestamp: new Date().toISOString(),
+    items: combinedItems // 최종 아이템 저장
   }));
 }
 
@@ -252,15 +255,7 @@ export const handler = async () => {
         const newItem = await processItem(item);
         if (newItem) {
           // 신규 아이템을 기존 캐시의 첫 번째로 삽입
-          const cachedData = await store.get(CACHE_KEY);
-          const existingItems = cachedData ? JSON.parse(cachedData).items : [];
-          existingItems.unshift(newItem); // 신규 아이템을 첫 번째로 추가
-
-          // 캐시 데이터 저장
-          await store.set(CACHE_KEY, JSON.stringify({
-            timestamp: new Date().toISOString(),
-            items: existingItems // 최종 아이템 저장
-          }));
+          await saveCache(store, [newItem], true); // 기존 데이터와 합치기
         }
         processedCount++; // 처리된 아이템 수 증가
       }
@@ -289,7 +284,7 @@ export const handler = async () => {
     if (uniqueItems.length !== filteredItems.length || uniqueItems.length !== processedItems.length) {
       console.log(`캐시 저장 조건 충족: uniqueItems.length = ${uniqueItems.length}, filteredItems.length = ${filteredItems.length}, processedItems.length = ${processedItems.length}`);
       // 정리한 내용을 캐시에 저장
-      await saveCache(store, uniqueItems);
+      await saveCache(store, uniqueItems, false); // 주어진 데이터만 저장
       isCached = false; // saveCache를 호출한 경우 isCached를 false로 설정
     }
 
