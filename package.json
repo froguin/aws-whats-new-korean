@@ -11,12 +11,16 @@
   "dependencies": {
     "@astrojs/check": "^0.9.4",
     "@astrojs/netlify": "^5.5.4",
-    "@netlify/blobs": "^6.3.2",
+    "@aws-sdk/client-bedrock-runtime": "^3.705.0",
+    "@netlify/blobs": "^6.5.0",
     "astro": "^4.16.16",
+    "async": "^3.2.6",
     "axios": "^1.7.8",
     "dompurify": "^3.2.2",
+    "node-fetch": "^3.3.2",
     "rss-to-json": "^2.1.1",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "@astrojs/tailwind": "^5.1.2",

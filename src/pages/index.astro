@@ -10,11 +10,26 @@ interface Update {
   features?: string;
   regions?: string;
   status?: string;
+  originalLink?: string;
 }
 
+interface Meta {
+  isCached: boolean;
+  lastUpdated: string;
+  itemCount: number;
+}
+
+// Google Analytics 스크립트 추가
+const googleAnalyticsScript = `
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-6K10Z2P301');
+`;
+
 let updates: Update[] = [];
+let meta: Meta | null = null;
 let errorMessage: string | null = null;
-let lastUpdated: string | null = null;
 
 try {
   const baseUrl = Astro.url.origin;
@@ -29,21 +44,74 @@ try {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   
-  updates = await response.json();
-  lastUpdated = new Date().toLocaleString('ko-KR');
+  const data = await response.json();
+  updates = data.items;
+  meta = data.meta;
 } catch (e) {
   console.error('데이터를 가져오는 중 오류가 발생했습니다:', e);
   errorMessage = e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다';
 }
+
+// 클라이언트 사이드에서 필터링을 위한 스크립트
+const clientSideScript = `
+  document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('keyword-search');
+    const cards = document.querySelectorAll('.update-card');
+    
+    searchInput.addEventListener('input', () => {
+      const keyword = searchInput.value.toLowerCase().trim();
+      let visibleCount = 0;
+      
+      cards.forEach(card => {
+        const cardText = card.textContent.toLowerCase();
+        const isVisible = keyword === '' || cardText.includes(keyword);
+        
+        card.style.display = isVisible ? 'block' : 'none';
+        if (isVisible) visibleCount++;
+      });
+
+      // 검색 결과 없을 때 메시지 표시
+      const noResultsMessage = document.getElementById('no-results-message');
+      const totalCardsContainer = document.getElementById('update-cards-container');
+      
+      if (visibleCount === 0) {
+        noResultsMessage.classList.remove('hidden');
+        totalCardsContainer.classList.add('hidden');
+      } else {
+        noResultsMessage.classList.add('hidden');
+        totalCardsContainer.classList.remove('hidden');
+      }
+    });
+  });
+`;
 ---
 
 <Layout title="AWS What's New 한국어 요약">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-    {lastUpdated && (
+    {meta && (
       <div class="text-sm text-gray-500 mb-4">
-        마지막 업데이트: {lastUpdated}
+        <div class="flex justify-between items-center">
+          <div>
+            마지막 업데이트: {new Date(meta.lastUpdated).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+            {meta.isCached && <span class="ml-2 text-blue-600">(캐시됨)</span>}
+          </div>
+          <div>
+            총 {meta.itemCount}개의 업데이트
+          </div>
+        </div>
       </div>
     )}
+
+    {/* 검색 필터 추가 */}
+    <div class="mb-4">
+      <input 
+        type="text" 
+        id="keyword-search" 
+        placeholder="키워드로 검색" 
+        class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+    </div>
+
     {errorMessage ? (
       <div class="rounded-md bg-red-50 p-4 my-4">
         <div class="flex">
@@ -56,17 +124,35 @@ try {
         </div>
       </div>
     ) : (
-      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 my-6">
-        {updates.length > 0 ? (
-          updates.map((update) => (
-            <UpdateCard {...update} />
-          ))
-        ) : (
-          <div class="col-span-full text-center py-12">
-            <p class="text-gray-500">현재 표시할 업데이트가 없습니다.</p>
-          </div>
-        )}
-      </div>
+      <>
+        <div 
+          id="no-results-message" 
+          class="hidden col-span-full text-center py-12"
+        >
+          <p class="text-gray-500">검색 결과가 없습니다.</p>
+        </div>
+
+        <div 
+          id="update-cards-container"
+          class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 my-6"
+        >
+          {updates.length > 0 ? (
+            updates.map((update) => (
+              <div class="update-card">
+                <UpdateCard {...update} />
+              </div>
+            ))
+          ) : (
+            <div class="col-span-full text-center py-12">
+              <p class="text-gray-500">현재 표시할 업데이트가 없습니다.</p>
+            </div>
+          )}
+        </div>
+      </>
     )}
   </div>
+
+  <script is:inline set:html={clientSideScript}></script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-6K10Z2P301"></script>
+  <script is:inline set:html={googleAnalyticsScript}></script>
 </Layout>

@@ -23,3 +23,6 @@
 
 [functions]
   node_bundler = "esbuild"
+
+[[blobs.stores]]
+name = "aws-updates"
