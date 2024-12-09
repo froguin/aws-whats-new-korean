@@ -232,7 +232,7 @@ export const handler = async () => {
     // RSS 피드 가져오기 및 필터링
     const rss = await parse(RSS_URL);
     const recentItems = filterRecentItems(rss.items);
-    console.log('일주일 이내 항목 수:', recentItems.length);
+    console.log(`${CACHE_TTL_DAY}일 이내 항목 수:`, recentItems.length);
 
     // 중복되지 않는 아이템만 필터링
     const newItems = recentItems.filter(item => {
