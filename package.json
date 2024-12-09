@@ -11,7 +11,10 @@
   "dependencies": {
     "@astrojs/check": "^0.9.4",
     "@astrojs/netlify": "^5.5.4",
+    "@astrojs/react": "^4.0.0",
     "@aws-sdk/client-bedrock-runtime": "^3.705.0",
+    "@cloudscape-design/components": "^3.0.841",
+    "@cloudscape-design/global-styles": "^1.0.33",
     "@netlify/blobs": "^6.5.0",
     "astro": "^4.16.16",
     "async": "^3.2.6",
