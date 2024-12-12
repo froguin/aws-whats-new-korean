@@ -19,14 +19,6 @@ interface Meta {
   itemCount: number;
 }
 
-// Google Analytics 스크립트 추가
-const googleAnalyticsScript = `
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-6K10Z2P301');
-`;
-
 let updates: Update[] = [];
 let meta: Meta | null = null;
 let errorMessage: string | null = null;
@@ -89,11 +81,11 @@ const clientSideScript = `
 <Layout title="AWS What's New 한국어 요약">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     {meta && (
-      <div class="text-sm text-gray-500 mb-4">
+      <div class="text-sm text-gray-500 dark:text-gray-400 mb-4">
         <div class="flex justify-between items-center">
           <div>
             마지막 업데이트: {new Date(meta.lastUpdated).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
-            {meta.isCached && <span class="ml-2 text-blue-600">(캐시됨)</span>}
+            {meta.isCached && <span class="ml-2 text-blue-600 dark:text-blue-400">(캐시됨)</span>}
           </div>
           <div>
             총 {meta.itemCount}개의 업데이트
@@ -102,22 +94,26 @@ const clientSideScript = `
       </div>
     )}
 
-    {/* 검색 필터 추가 */}
+    {/* 검색 필터 */}
     <div class="mb-4">
       <input 
         type="text" 
         id="keyword-search" 
         placeholder="키워드로 검색" 
-        class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="w-full px-3 py-2 border dark:border-gray-600 rounded-md 
+               bg-white dark:bg-gray-700 
+               text-gray-900 dark:text-gray-100
+               focus:outline-none focus:ring-2 focus:ring-blue-500 
+               placeholder-gray-500 dark:placeholder-gray-400"
       />
     </div>
 
     {errorMessage ? (
-      <div class="rounded-md bg-red-50 p-4 my-4">
+      <div class="rounded-md bg-red-50 dark:bg-red-900/50 p-4 my-4">
         <div class="flex">
           <div class="ml-3">
-            <h3 class="text-sm font-medium text-red-800">오류 발생</h3>
-            <div class="mt-2 text-sm text-red-700">
+            <h3 class="text-sm font-medium text-red-800 dark:text-red-200">오류 발생</h3>
+            <div class="mt-2 text-sm text-red-700 dark:text-red-300">
               <p>데이터를 불러오는 중 오류가 발생했습니다: {errorMessage}</p>
             </div>
           </div>
@@ -129,7 +125,7 @@ const clientSideScript = `
           id="no-results-message" 
           class="hidden col-span-full text-center py-12"
         >
-          <p class="text-gray-500">검색 결과가 없습니다.</p>
+          <p class="text-gray-500 dark:text-gray-400">검색 결과가 없습니다.</p>
         </div>
 
         <div 
@@ -144,7 +140,7 @@ const clientSideScript = `
             ))
           ) : (
             <div class="col-span-full text-center py-12">
-              <p class="text-gray-500">현재 표시할 업데이트가 없습니다.</p>
+              <p class="text-gray-500 dark:text-gray-400">현재 표시할 업데이트가 없습니다.</p>
             </div>
           )}
         </div>
@@ -153,6 +149,5 @@ const clientSideScript = `
   </div>
 
   <script is:inline set:html={clientSideScript}></script>
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-6K10Z2P301"></script>
-  <script is:inline set:html={googleAnalyticsScript}></script>
+  <script async is:inline src="https://www.googletagmanager.com/gtag/js?id=G-6K10Z2P301"></script>
 </Layout>

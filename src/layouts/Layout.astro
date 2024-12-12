@@ -20,19 +20,79 @@ const { title } = Astro.props;
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
   </head>
-  <body class="bg-gray-50">
-    <header class="bg-white shadow-sm">
-      <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
-        <h1 class="text-3xl font-bold text-gray-900">AWS What's New 한국어 요약</h1>
+  <body class="bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+    <header class="bg-white dark:bg-gray-800 shadow-sm">
+      <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">AWS What's New 한국어 요약</h1>
+        
+        <button id="theme-toggle" class="text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-4 focus:ring-gray-200 dark:focus:ring-gray-700 rounded-lg text-sm p-2.5">
+          <svg id="theme-toggle-dark-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+          </svg>
+          <svg id="theme-toggle-light-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path>
+          </svg>
+        </button>
       </div>
     </header>
     <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <slot />
     </main>
-    <footer class="bg-white border-t border-gray-200 mt-8">
+    <footer class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-8">
       <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
-        <p class="text-center text-gray-500">© {new Date().getFullYear()} AWS What's New 한국어 요약. 모든 권리 보유. This is not an official AWS product or project.</p>
+        <p class="text-center text-gray-500 dark:text-gray-400">© {new Date().getFullYear()} AWS What's New 한국어 요약. 모든 권리 보유. This is not an official AWS product or project.</p>
       </div>
     </footer>
+
+    <script is:inline>
+      // 테마 관리를 위한 함수
+      function handleTheme() {
+        const themeToggleDarkIcon = document.getElementById('theme-toggle-dark-icon');
+        const themeToggleLightIcon = document.getElementById('theme-toggle-light-icon');
+        const themeToggleBtn = document.getElementById('theme-toggle');
+
+        // 초기 테마 설정 (시스템 설정 기본값)
+        if ((!localStorage.getItem('color-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches) ||
+            localStorage.getItem('color-theme') === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+
+        // 아이콘 상태 업데이트
+        function updateIcons() {
+          if (document.documentElement.classList.contains('dark')) {
+            themeToggleDarkIcon.classList.add('hidden');
+            themeToggleLightIcon.classList.remove('hidden');
+          } else {
+            themeToggleDarkIcon.classList.remove('hidden');
+            themeToggleLightIcon.classList.add('hidden');
+          }
+        }
+        updateIcons();
+
+        // 테마 토글 버튼 이벤트
+        themeToggleBtn.addEventListener('click', function() {
+          document.documentElement.classList.toggle('dark');
+          localStorage.setItem('color-theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+          updateIcons();
+        });
+
+        // 시스템 테마 변경 감지
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+          if (!localStorage.getItem('color-theme')) {
+            if (e.matches) {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+            }
+            updateIcons();
+          }
+        });
+      }
+
+      // DOM 로드 후 실행
+      document.addEventListener('DOMContentLoaded', handleTheme);
+    </script>
   </body>
 </html>
