@@ -19,6 +19,13 @@ interface Meta {
   itemCount: number;
 }
 
+const googleAnalyticsScript = `
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-6K10Z2P301');
+`;
+
 let updates: Update[] = [];
 let meta: Meta | null = null;
 let errorMessage: string | null = null;
@@ -150,10 +157,5 @@ const clientSideScript = `
 
   <script is:inline set:html={clientSideScript}></script>
   <script async is:inline src="https://www.googletagmanager.com/gtag/js?id=G-6K10Z2P301"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-6K10Z2P301');
-  </script>
+  <script is:inline set:html={googleAnalyticsScript}></script>
 </Layout>
