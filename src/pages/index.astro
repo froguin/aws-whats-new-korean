@@ -150,4 +150,10 @@ const clientSideScript = `
 
   <script is:inline set:html={clientSideScript}></script>
   <script async is:inline src="https://www.googletagmanager.com/gtag/js?id=G-6K10Z2P301"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-6K10Z2P301');
+  </script>
 </Layout>
