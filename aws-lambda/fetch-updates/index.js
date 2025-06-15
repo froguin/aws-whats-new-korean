@@ -4,25 +4,26 @@ import rssToJson from 'rss-to-json';
 
 const { parse } = rssToJson;
 
-const RSS_URL = 'https://aws.amazon.com/about-aws/whats-new/recent/feed/';
-const CACHE_KEY = 'aws-updates-v2';
-const CACHE_TTL_DAY = 30;
-const MAX_ITEMS_TO_PROCESS = 30;
-
 // AWS 클라이언트 초기화 (리전은 자동으로 감지됨)
 const dynamoClient = new DynamoDBClient({});
 const bedrockClient = new BedrockRuntimeClient({});
 
-export const handler = async (event) => {
-    const headers = {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
-    };
+const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE;
+const CACHE_DURATION = 30 * 24 * 60 * 60 * 1000; // 30일
 
+export const handler = async (event) => {
+    console.log('Event:', JSON.stringify(event, null, 2));
+    
     try {
-        // OPTIONS 요청 처리 (CORS)
+        // CORS 헤더
+        const headers = {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Content-Type',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+        };
+
+        // OPTIONS 요청 처리
         if (event.httpMethod === 'OPTIONS') {
             return {
                 statusCode: 200,
@@ -31,47 +32,73 @@ export const handler = async (event) => {
             };
         }
 
-        // 캐시된 데이터 확인
-        const cachedData = await getCachedData();
-        if (cachedData && !isExpired(cachedData.lastUpdated)) {
-            return {
-                statusCode: 200,
-                headers,
-                body: JSON.stringify({
-                    items: cachedData.items,
-                    meta: {
-                        isCached: true,
-                        lastUpdated: cachedData.lastUpdated,
-                        itemCount: cachedData.items.length
-                    }
-                })
-            };
+        // RSS 피드 파싱
+        console.log('Fetching RSS feed...');
+        const rssData = await parse('https://aws.amazon.com/about-aws/whats-new/recent/feed/');
+        
+        if (!rssData || !rssData.items) {
+            throw new Error('RSS 데이터를 가져올 수 없습니다.');
         }
 
-        // RSS 피드 파싱
-        const rssData = await parse(RSS_URL);
-        const items = rssData.items.slice(0, MAX_ITEMS_TO_PROCESS);
-        
-        // 각 항목 처리 및 번역
+        console.log(`Found ${rssData.items.length} items in RSS feed`);
+
+        // 최신 30개 아이템만 처리
+        const recentItems = rssData.items.slice(0, 30);
         const processedItems = [];
-        for (const item of items) {
+
+        for (const item of recentItems) {
             try {
-                const translatedItem = await processItem(item);
-                processedItems.push(translatedItem);
+                const itemId = generateItemId(item.link);
+                
+                // DynamoDB에서 기존 아이템 확인
+                const existingItem = await getItemFromDynamoDB(itemId);
+                
+                if (existingItem && existingItem.koreanSummary) {
+                    // 이미 한글 요약이 있는 경우 그대로 사용
+                    processedItems.push({
+                        id: itemId,
+                        title: existingItem.title,
+                        date: new Date(item.published).getTime(),
+                        content: existingItem.koreanSummary,
+                        originalLink: item.link,
+                        originalContent: existingItem.originalContent
+                    });
+                } else {
+                    // 새로운 아이템이거나 한글 요약이 없는 경우
+                    console.log(`Processing new item: ${item.title}`);
+                    
+                    // Nova Micro로 한글 요약 생성
+                    const koreanSummary = await generateKoreanSummary(item.title, item.description);
+                    
+                    const processedItem = {
+                        id: itemId,
+                        title: item.title,
+                        date: new Date(item.published).getTime(),
+                        content: koreanSummary,
+                        originalLink: item.link,
+                        originalContent: item.description
+                    };
+
+                    // DynamoDB에 개별 아이템 저장
+                    await saveItemToDynamoDB(processedItem);
+                    processedItems.push(processedItem);
+                }
             } catch (error) {
-                console.error('항목 처리 중 오류:', error);
-                // 번역 실패 시 원본 데이터 사용
+                console.error(`Error processing item ${item.title}:`, error);
+                // 에러가 발생한 아이템은 원문 그대로 사용
                 processedItems.push({
+                    id: generateItemId(item.link),
                     title: item.title,
-                    date: item.published,
+                    date: new Date(item.published).getTime(),
                     content: item.description,
-                    originalLink: item.link
+                    originalLink: item.link,
+                    originalContent: item.description
                 });
             }
         }
 
-        // 캐시에 저장
-        await saveCachedData(processedItems);
+        // 날짜순으로 정렬 (최신순)
+        processedItems.sort((a, b) => b.date - a.date);
 
         return {
             statusCode: 200,
@@ -87,131 +114,132 @@ export const handler = async (event) => {
         };
 
     } catch (error) {
-        console.error('Lambda 함수 실행 중 오류:', error);
+        console.error('Error:', error);
         return {
             statusCode: 500,
-            headers,
+            headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
             body: JSON.stringify({
-                error: '서버 오류가 발생했습니다.',
+                error: 'Internal Server Error',
                 message: error.message
             })
         };
     }
 };
 
-async function getCachedData() {
+// 아이템 ID 생성 함수
+function generateItemId(link) {
+    return Buffer.from(link).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 50);
+}
+
+// DynamoDB에서 아이템 조회
+async function getItemFromDynamoDB(itemId) {
     try {
         const command = new GetItemCommand({
-            TableName: process.env.DYNAMODB_TABLE,
+            TableName: DYNAMODB_TABLE,
             Key: {
-                id: { S: CACHE_KEY }
+                id: { S: itemId }
             }
         });
-        
+
         const result = await dynamoClient.send(command);
+        
         if (result.Item) {
             return {
-                items: JSON.parse(result.Item.items.S),
-                lastUpdated: result.Item.lastUpdated.S
+                id: result.Item.id.S,
+                title: result.Item.title.S,
+                originalContent: result.Item.originalContent.S,
+                koreanSummary: result.Item.koreanSummary?.S,
+                createdAt: result.Item.createdAt.S
             };
         }
+        
         return null;
     } catch (error) {
-        console.error('캐시 데이터 조회 중 오류:', error);
+        console.error('Error getting item from DynamoDB:', error);
         return null;
     }
 }
 
-async function saveCachedData(items) {
+// DynamoDB에 아이템 저장
+async function saveItemToDynamoDB(item) {
     try {
-        const ttl = Math.floor(Date.now() / 1000) + (CACHE_TTL_DAY * 24 * 60 * 60);
+        const ttl = Math.floor((Date.now() + CACHE_DURATION) / 1000);
         
         const command = new PutItemCommand({
-            TableName: process.env.DYNAMODB_TABLE,
+            TableName: DYNAMODB_TABLE,
             Item: {
-                id: { S: CACHE_KEY },
-                items: { S: JSON.stringify(items) },
-                lastUpdated: { S: new Date().toISOString() },
+                id: { S: item.id },
+                title: { S: item.title },
+                originalContent: { S: item.originalContent },
+                koreanSummary: { S: item.content },
+                originalLink: { S: item.originalLink },
+                createdAt: { S: new Date().toISOString() },
                 ttl: { N: ttl.toString() },
                 status: { S: 'active' },
-                pubDate: { S: new Date().toISOString() }
+                pubDate: { S: new Date(item.date).toISOString() }
             }
         });
-        
+
         await dynamoClient.send(command);
+        console.log(`Saved item to DynamoDB: ${item.id}`);
     } catch (error) {
-        console.error('캐시 데이터 저장 중 오류:', error);
-    }
-}
-
-function isExpired(lastUpdated) {
-    const now = new Date();
-    const updated = new Date(lastUpdated);
-    const diffHours = (now - updated) / (1000 * 60 * 60);
-    return diffHours > (CACHE_TTL_DAY * 24);
-}
-
-async function processItem(item) {
-    const translatedData = await invokeNovaMicroSummarization(item.title, item.description);
-    
-    return {
-        title: translatedData.title || item.title,
-        date: item.published,
-        content: translatedData.content || item.description,
-        target: translatedData.target,
-        features: translatedData.features,
-        regions: translatedData.regions,
-        status: translatedData.status,
-        originalLink: item.link
-    };
-}
-
-async function invokeNovaMicroSummarization(title, description) {
-    const systemPrompt = generateSystemPrompt(title, description);
-    
-    const params = {
-        modelId: 'apac.amazon.nova-micro-v1:0', // APAC Nova Micro inference profile
-        contentType: 'application/json',
-        accept: 'application/json',
-        body: JSON.stringify({
-            schemaVersion: "messages-v1",
-            messages: [{ role: "user", content: [{ text: systemPrompt }] }],
-        })
-    };
-
-    try {
-        const command = new InvokeModelCommand(params);
-        const response = await bedrockClient.send(command);
-        const decodedResponseBody = new TextDecoder().decode(response.body);
-        const parsedResponse = JSON.parse(decodedResponseBody);
-        
-        if (parsedResponse.output?.message?.content?.[0]?.text) {
-            const jsonString = parsedResponse.output.message.content[0].text;
-            return JSON.parse(jsonString);
-        }
-        
-        throw new Error('유효한 응답을 받지 못했습니다.');
-    } catch (error) {
-        console.error('Nova 모델 호출 중 오류:', error);
+        console.error('Error saving item to DynamoDB:', error);
         throw error;
     }
 }
 
-function generateSystemPrompt(title, description) {
-    return `다음 AWS 업데이트 정보를 한국어로 번역하고 요약해주세요.
+// Nova Micro로 한글 요약 생성
+async function generateKoreanSummary(title, content) {
+    try {
+        const systemPrompt = `다음 AWS 업데이트 내용을 한국어로 요약해주세요. 기술적인 내용을 정확하게 전달하면서도 이해하기 쉽게 작성해주세요.
 
 제목: ${title}
-내용: ${description}
+내용: ${content}
 
-다음 JSON 형식으로 응답해주세요:
-{
-  "title": "한국어로 번역된 제목",
-  "content": "한국어로 번역되고 요약된 내용 (2-3문장)",
-  "target": "대상 사용자나 서비스 (예: 개발자, 데이터 엔지니어 등)",
-  "features": "주요 기능이나 특징",
-  "regions": "사용 가능한 리전 정보",
-  "status": "서비스 상태 (예: GA, Preview, Beta 등)"
-}
+요구사항:
+1. 한국어로 자연스럽게 번역
+2. 기술 용어는 정확하게 유지
+3. 2-3문장으로 핵심 내용 요약
+4. HTML 태그는 제거하고 순수 텍스트로 작성
+5. 마케팅 문구보다는 기술적 사실에 집중
 
-번역 시 기술 용어는 적절히 한국어화하되, AWS 서비스명은 원문 그대로 유지해주세요.`;
+한글 요약:`;
+
+        const params = {
+            modelId: 'apac.amazon.nova-micro-v1:0',
+            contentType: 'application/json',
+            accept: 'application/json',
+            body: JSON.stringify({
+                schemaVersion: "messages-v1",
+                messages: [{ role: "user", content: [{ text: systemPrompt }] }],
+                inferenceConfig: {
+                    maxTokens: 500,
+                    temperature: 0.3
+                }
+            })
+        };
+
+        const command = new InvokeModelCommand(params);
+        const response = await bedrockClient.send(command);
+        
+        const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+        const summary = responseBody.output?.message?.content?.[0]?.text || content;
+        
+        // HTML 태그 제거 및 정리
+        return summary
+            .replace(/<[^>]*>/g, '')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .trim();
+
+    } catch (error) {
+        console.error('Error generating Korean summary:', error);
+        // Nova Micro 호출 실패 시 원문 반환
+        return content.replace(/<[^>]*>/g, '').trim();
+    }
 }
