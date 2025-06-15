@@ -114,9 +114,9 @@ async function processRSSFeed() {
         console.log(`XML에서 ${Object.keys(guidMap).length}개 GUID 추출`);
 
         const processedItems = [];
-        const maxItems = 30; // 처리할 최대 아이템 수 증가
+        const maxItems = 20; // 처리할 최대 아이템 수 제한
 
-        // 최근 30개 아이템 처리
+        // 최근 20개 아이템만 처리
         const itemsToProcess = rssData.items.slice(0, maxItems);
         console.log(`처리할 아이템 수: ${itemsToProcess.length}개`);
 
@@ -128,27 +128,19 @@ async function processRSSFeed() {
             
             console.log(`\n--- 아이템 ${i + 1}/${itemsToProcess.length} 처리 중 ---`);
             console.log('제목:', item.title);
-            console.log('GUID:', itemGuid || '없음');
+            console.log('GUID:', itemGuid);
             console.log('링크:', item.link);
             
             try {
-                // 고유 ID 생성 - GUID가 없으면 링크의 해시 사용
-                let itemId;
-                if (itemGuid) {
-                    itemId = generateUniqueId(itemGuid);
-                } else {
-                    // 링크에서 마지막 부분을 추출하여 더 안정적인 ID 생성
-                    const linkParts = item.link.split('/');
-                    const lastPart = linkParts[linkParts.length - 1] || linkParts[linkParts.length - 2];
-                    itemId = generateUniqueId(lastPart || item.link);
-                }
-                
+                // 고유 ID 생성 (GUID 우선, 없으면 링크 사용)
+                const uniqueSource = itemGuid || item.link || item.title;
+                const itemId = generateUniqueId(uniqueSource);
                 console.log('생성된 ID:', itemId);
 
                 // DynamoDB에서 기존 아이템 확인
                 const existingItem = await getItemFromDynamoDB(itemId);
                 
-                if (existingItem && existingItem.koTitle && existingItem.koTitle.length > 10) {
+                if (existingItem && existingItem.koTitle) {
                     console.log('기존 번역된 아이템 사용');
                     processedItems.push(formatItemForResponse(existingItem));
                 } else {
@@ -156,12 +148,12 @@ async function processRSSFeed() {
                     
                     // Nova Micro로 번역
                     const translation = await translateWithNovaMicro(item.title, item.description);
-                    console.log('번역 결과 제목:', translation.title);
+                    console.log('번역 결과:', translation);
                     
                     // DynamoDB에 저장할 아이템 구성
                     const dbItem = {
                         id: itemId,
-                        guid: itemGuid || '',
+                        guid: itemGuid,
                         originalTitle: item.title,
                         originalContent: item.description,
                         koTitle: translation.title,
@@ -181,31 +173,27 @@ async function processRSSFeed() {
                     
                     processedItems.push(formatItemForResponse(dbItem));
                     
-                    // API 호출 제한을 위한 지연 (더 짧게)
+                    // API 호출 제한을 위한 지연
                     if (i < itemsToProcess.length - 1) {
-                        console.log('1.5초 대기...');
-                        await new Promise(resolve => setTimeout(resolve, 1500));
+                        console.log('2초 대기...');
+                        await new Promise(resolve => setTimeout(resolve, 2000));
                     }
                 }
             } catch (itemError) {
                 console.error(`아이템 처리 중 오류:`, itemError);
                 
-                // 오류 발생 시에도 기본 정보는 저장
-                const fallbackId = generateUniqueId(item.link);
-                const fallbackItem = {
-                    id: fallbackId,
+                // 오류 발생 시 기본값으로 처리
+                processedItems.push({
+                    id: generateUniqueId(itemGuid || item.link || item.title),
                     title: item.title,
                     date: new Date(item.published).toLocaleDateString('ko-KR'),
-                    content: cleanText(item.description).substring(0, 200) + '...',
+                    content: cleanText(item.description).substring(0, 200),
                     target: "모든 AWS 사용자",
                     features: "자세한 내용은 원문을 참조하세요",
                     regions: "해당 없음",
                     status: "정식 출시",
-                    originalLink: item.link,
-                    pubDate: item.published
-                };
-                
-                processedItems.push(fallbackItem);
+                    originalLink: item.link
+                });
             }
         }
 
@@ -270,16 +258,16 @@ function extractGUIDsFromXML(xmlData) {
     return guidMap;
 }
 
-// Nova Micro 번역 함수 (개선된 버전)
+// Nova Micro 번역 함수 (Netlify 버전의 검증된 프롬프트 사용)
 async function translateWithNovaMicro(title, content) {
     console.log('=== Nova Micro 번역 시작 ===');
-    console.log('제목:', title.substring(0, 100) + '...');
+    console.log('제목:', title);
     
     try {
         const cleanContent = cleanText(content);
-        const shortContent = cleanContent.substring(0, 500); // 길이 증가
+        const shortContent = cleanContent.substring(0, 400); // 적절한 길이로 제한
         
-        // 개선된 프롬프트 사용
+        // Netlify에서 검증된 프롬프트 사용
         const systemPrompt = generateSystemPrompt(title, shortContent);
 
         console.log('Nova Micro 호출 중...');
@@ -295,9 +283,9 @@ async function translateWithNovaMicro(title, content) {
                     content: [{ text: systemPrompt }] 
                 }],
                 inferenceConfig: {
-                    maxTokens: 500, // 토큰 수 증가
-                    temperature: 0.05, // 더 일관된 결과를 위해 낮춤
-                    topP: 0.9
+                    maxTokens: 400,
+                    temperature: 0.1,
+                    topP: 0.8
                 }
             })
         };
@@ -308,33 +296,27 @@ async function translateWithNovaMicro(title, content) {
         const responseBody = JSON.parse(new TextDecoder().decode(response.body));
         const aiResponse = responseBody.output?.message?.content?.[0]?.text || '';
         
-        console.log('Nova Micro 응답 길이:', aiResponse.length);
+        console.log('Nova Micro 원본 응답:');
+        console.log(aiResponse);
         
         // JSON 응답 파싱
-        if (aiResponse && aiResponse.trim().length > 20) {
+        if (aiResponse && aiResponse.trim().length > 10) {
             const translation = parseModelResponse(aiResponse);
-            
-            // 번역 품질 검증
-            if (translation.title && translation.title.length > 5 && 
-                translation.summary && translation.summary.length > 10) {
-                console.log('번역 성공 - 제목:', translation.title.substring(0, 50) + '...');
-                return translation;
-            } else {
-                console.log('번역 품질 부족, 기본값 사용');
-                throw new Error('Translation quality insufficient');
-            }
+            console.log('파싱된 번역:', translation);
+            return translation;
         } else {
-            console.log('Nova Micro 응답이 너무 짧음, 기본값 사용');
-            throw new Error('Response too short from Nova Micro');
+            console.log('Nova Micro 응답이 비어있음, 기본값 사용');
+            throw new Error('Empty response from Nova Micro');
         }
 
     } catch (error) {
-        console.error('Nova Micro 번역 중 오류:', error.message);
+        console.error('Nova Micro 번역 중 오류:', error);
+        console.error('오류 스택:', error.stack);
         
-        // 오류 시 향상된 기본값 반환
+        // 오류 시 기본값 반환
         return {
             title: translateTitleBasic(title),
-            summary: generateKoreanSummary(title, cleanText(content).substring(0, 300)),
+            summary: generateKoreanSummary(title, cleanText(content).substring(0, 200)),
             target: determineTarget(title, content),
             features: extractFeatures(title, content),
             regions: determineRegions(content),
@@ -343,33 +325,41 @@ async function translateWithNovaMicro(title, content) {
     }
 }
 
-// 개선된 시스템 프롬프트 생성 함수
+// Netlify에서 검증된 시스템 프롬프트 생성 함수
 function generateSystemPrompt(title, description) {
     return `
-AWS 서비스 업데이트를 분석하고 한국어 사용자를 위한 구조화된 요약을 제공하는 전문가입니다.
+You are an expert in analyzing AWS service updates and providing concise, structured summaries for Korean-speaking AWS users.
 
-원문 제목: ${title}
-원문 설명: ${description}
+Original Title: ${title}
+Original Description: ${description}
 
-다음 JSON 형식으로 **한 줄**로 응답해주세요:
+Please provide a **single-line JSON-formatted response** with the following structure:
+{
+  "title": "한국어로 번역된 명확하고 간결한 제목",
+  "summary": "3-4문장으로 주요 업데이트 내용을 한국어로 요약 (250자 이하)",
+  "target": "이 업데이트의 주요 대상 사용자 그룹 (단일 문장)",
+  "features": "주요 기능 또는 변경 사항 요약 (100자 이하)",
+  "regions": "지원되는 AWS 리전 (알려진 경우, 없으면 '해당 없음')",
+  "status": "현재 상태 (예: 정식 출시 ('일반 공개'인 경우도 정식 출시로 표시합니다), 미리보기 ('프리뷰' 또는 '미리보기 단계'인 경우도 미리보기로 표기합니다) 등으로 표기합니다)"
+}
 
-{"title": "한국어 제목", "summary": "3-4문장 요약", "target": "대상 사용자", "features": "주요 기능", "regions": "지원 리전", "status": "출시 상태"}
+**Important Guidelines:**
+1. 응답은 **단일 줄**로 작성하고 줄바꿈이나 탭 문자를 사용하지 마십시오.
+2. 각 필드 값은 평문 문자열로 작성하고 중첩된 JSON을 포함하지 마십시오.
+3. 모든 필드는 JSON.parse()로 바로 파싱 가능해야 합니다.
+4. 알 수 없는 정보는 "알 수 없음" 또는 "해당 없음"으로 작성하십시오.
+5. 응답은 **최대 300자**를 넘지 않도록 간결하게 작성하십시오.
+6. 번역 시에 AWS 또는 Amazon 으로 시작하는 제품명은 원문 그대로 표현하는 것이 좋습니다.
 
-**중요한 지침:**
-1. 응답은 반드시 **한 줄**로 작성하고 줄바꿈 없이 작성
-2. JSON 형식을 정확히 준수
-3. 각 필드는 다음과 같이 작성:
-   - title: 명확하고 간결한 한국어 제목 (AWS 서비스명은 영문 유지)
-   - summary: 주요 업데이트 내용을 3-4문장으로 요약 (200자 이내)
-   - target: 주요 대상 사용자 그룹 (예: "개발자", "시스템 관리자", "모든 AWS 사용자")
-   - features: 핵심 기능이나 변경사항 (100자 이내)
-   - regions: 지원되는 AWS 리전 정보 (알 수 없으면 "선택된 리전")
-   - status: "정식 출시", "미리보기", "베타" 중 하나
-
-**예시:**
-{"title": "AWS Lambda 새로운 메모리 옵션 지원", "summary": "AWS Lambda가 더 큰 메모리 옵션과 향상된 성능 모니터링을 제공합니다. 이를 통해 메모리 집약적인 워크로드의 성능이 개선됩니다.", "target": "서버리스 개발자", "features": "메모리 옵션 확장, 성능 모니터링", "regions": "모든 AWS 리전", "status": "정식 출시"}
-
-지금 번역해주세요:
+**Example JSON Response:**
+{
+  "title": "AWS Lambda 기능 개선 발표",
+  "summary": "AWS Lambda가 새로운 메모리 옵션과 고급 모니터링 기능을 제공합니다.",
+  "target": "서버리스 애플리케이션 개발자",
+  "features": "메모리 옵션, 고급 모니터링",
+  "regions": "모든 AWS 리전",
+  "status": "정식 출시"
+}
     `;
 }
 
