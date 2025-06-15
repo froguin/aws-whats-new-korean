@@ -106,13 +106,29 @@ export const handler = async (event) => {
 // 배치 처리 함수
 async function performBatchProcessing() {
     try {
-        console.log('배치 처리: 오래된 데이터 정리 시작');
+        console.log('=== 배치 처리 시작 ===');
+        const startTime = Date.now();
+        
+        console.log('1단계: 오래된 데이터 정리 시작');
         await cleanupOldItems();
         
-        console.log('배치 처리: 새로운 데이터 업데이트 시작');
-        await processRSSFeed(true); // 배치 모드로 실행
+        console.log('2단계: 모든 RSS 아이템 처리 시작');
+        const processedItems = await processRSSFeed(true); // 배치 모드로 실행
         
-        console.log('배치 처리 완료');
+        const endTime = Date.now();
+        const duration = Math.round((endTime - startTime) / 1000);
+        
+        console.log(`=== 배치 처리 완료 ===`);
+        console.log(`- 처리 시간: ${duration}초`);
+        console.log(`- 총 아이템 수: ${processedItems.length}개`);
+        console.log(`- 완료 시각: ${new Date().toISOString()}`);
+        
+        return {
+            success: true,
+            duration: duration,
+            itemCount: processedItems.length,
+            completedAt: new Date().toISOString()
+        };
     } catch (error) {
         console.error('배치 처리 중 오류:', error);
         throw error;
@@ -130,11 +146,15 @@ async function processRSSFeed(isBatchMode = false) {
 
     console.log(`RSS에서 ${rssData.items.length}개 아이템 발견`);
 
-    // 최근 30개 아이템만 처리
-    const recentItems = rssData.items.slice(0, MAX_ITEMS_TO_PROCESS);
+    // 배치 모드일 때는 모든 아이템 처리, 일반 모드일 때는 최근 30개만
+    const itemsToProcess = isBatchMode ? rssData.items : rssData.items.slice(0, MAX_ITEMS_TO_PROCESS);
     const processedItems = [];
+    let processedCount = 0;
+    let skippedCount = 0;
 
-    for (const item of recentItems) {
+    console.log(`처리할 아이템 수: ${itemsToProcess.length} (배치 모드: ${isBatchMode})`);
+
+    for (const item of itemsToProcess) {
         try {
             const itemId = generateItemId(item.link);
             
@@ -142,11 +162,16 @@ async function processRSSFeed(isBatchMode = false) {
             const existingItem = await getItemFromDynamoDB(itemId);
             
             if (existingItem && existingItem.translations?.ko && !isBatchMode) {
-                // 이미 한국어 번역이 있고 배치 모드가 아닌 경우 그대로 사용
+                // 이미 한국어 번역이 있고 일반 모드인 경우 그대로 사용
                 processedItems.push(formatItemForResponse(existingItem, item));
+                skippedCount++;
+            } else if (existingItem && existingItem.translations?.ko && isBatchMode) {
+                // 배치 모드에서도 이미 번역된 아이템은 스킵 (중복 처리 방지)
+                processedItems.push(formatItemForResponse(existingItem, item));
+                skippedCount++;
             } else {
-                // 새로운 아이템이거나 배치 모드인 경우 처리
-                console.log(`새 아이템 처리: ${item.title}`);
+                // 새로운 아이템이거나 번역이 없는 경우 처리
+                console.log(`새 아이템 처리 중 (${processedCount + 1}/${itemsToProcess.length}): ${item.title}`);
                 
                 // Nova Micro로 다국어 번역 생성
                 const translations = await generateMultilingualContent(item.title, item.description);
@@ -164,6 +189,13 @@ async function processRSSFeed(isBatchMode = false) {
                 // DynamoDB에 저장
                 await saveItemToDynamoDB(processedItem);
                 processedItems.push(formatItemForResponse(processedItem, item));
+                processedCount++;
+                
+                // 배치 모드에서 API 호출 제한을 위한 지연
+                if (isBatchMode && processedCount % 5 === 0) {
+                    console.log(`${processedCount}개 처리 완료, 2초 대기...`);
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
             }
         } catch (error) {
             console.error(`아이템 처리 중 오류 ${item.title}:`, error);
@@ -179,12 +211,14 @@ async function processRSSFeed(isBatchMode = false) {
                 content: item.description.replace(/<[^>]*>/g, '').trim(),
                 target: "모든 AWS 사용자",
                 features: "자세한 내용은 원문을 참조하세요",
-                regions: "지원 리전 정보 없음",
-                status: "일반 공개",
+                regions: "해당 없음",
+                status: "정식 출시",
                 originalLink: item.link
             });
         }
     }
+
+    console.log(`처리 완료 - 새로 번역: ${processedCount}개, 기존 사용: ${skippedCount}개, 총: ${processedItems.length}개`);
 
     // 날짜순으로 정렬 (최신순)
     processedItems.sort((a, b) => new Date(b.pubDate || 0) - new Date(a.pubDate || 0));
@@ -392,28 +426,39 @@ async function saveItemToDynamoDB(item) {
     }
 }
 
-// Nova Micro로 다국어 번역 생성
+// Nova Micro로 다국어 번역 생성 (Micro 모델 최적화)
 async function generateMultilingualContent(title, content) {
     try {
-        const systemPrompt = `
-다음 AWS 업데이트 내용을 분석하여 한국어로 구조화된 정보를 제공해주세요.
+        // HTML 태그 제거 및 텍스트 정리
+        const cleanContent = cleanText(content);
+        
+        // Nova Micro에 최적화된 단계별 프롬프트
+        const systemPrompt = `당신은 AWS 기술 문서 번역 전문가입니다.
 
-제목: ${title}
-내용: ${content}
+**작업**: 다음 AWS 업데이트를 한국어로 번역하고 구조화하세요.
 
-다음 JSON 형식으로 **한 줄**로 응답해주세요:
-{"title": "한국어 제목", "summary": "3-4문장 요약 (250자 이하)", "target": "대상 사용자", "features": "주요 기능 (100자 이하)", "regions": "지원 리전", "status": "상태 (정식 출시/미리보기 등)"}
+**원문 제목**: ${title}
+**원문 내용**: ${cleanContent.substring(0, 800)}
 
-요구사항:
-1. 한국어로 자연스럽게 번역
-2. 기술 용어는 정확하게 유지  
-3. HTML 태그 제거
-4. 단일 줄 JSON 형식
-5. 알 수 없는 정보는 "해당 없음" 표기
-6. AWS 서비스명은 원문 그대로 유지
+**번역 규칙**:
+1. AWS 서비스명은 영문 그대로 유지 (예: Amazon S3, AWS Lambda)
+2. 기술 용어는 정확히 번역 (예: region → 리전, instance → 인스턴스)
+3. 마케팅 문구보다 기술적 사실에 집중
+4. 간결하고 명확하게 표현
 
-예시:
-{"title": "AWS Lambda 기능 개선", "summary": "AWS Lambda가 새로운 메모리 옵션과 고급 모니터링을 제공합니다.", "target": "서버리스 개발자", "features": "메모리 옵션, 모니터링", "regions": "모든 AWS 리전", "status": "정식 출시"}`;
+**출력 형식**: 정확히 다음 JSON 형식으로만 응답하세요.
+{"title":"한국어_제목","summary":"핵심_내용_요약_3문장_이내","target":"주요_대상_사용자","features":"핵심_기능_또는_변경사항","regions":"지원_리전_정보","status":"출시_상태"}
+
+**필드별 가이드**:
+- title: 제목을 자연스러운 한국어로 번역
+- summary: 무엇이 새로워졌는지, 어떤 이점이 있는지 3문장 이내로 요약
+- target: 누가 사용할지 (예: "개발자", "데이터 엔지니어", "모든 사용자")
+- features: 주요 기능이나 개선사항을 간단히 (예: "새로운 API", "성능 향상")
+- regions: 어느 리전에서 사용 가능한지 (모르면 "해당 없음")
+- status: "정식 출시", "미리보기", "베타" 중 하나
+
+**예시**:
+{"title":"Amazon S3 새로운 스토리지 클래스 출시","summary":"Amazon S3에서 비용 효율적인 새로운 스토리지 클래스를 제공합니다. 자주 액세스하지 않는 데이터의 비용을 최대 40% 절감할 수 있습니다. 기존 S3 API와 완전 호환됩니다.","target":"모든 AWS 사용자","features":"새로운 스토리지 클래스, 비용 절감","regions":"모든 AWS 리전","status":"정식 출시"}`;
 
         const params = {
             modelId: 'apac.amazon.nova-micro-v1:0',
@@ -423,8 +468,9 @@ async function generateMultilingualContent(title, content) {
                 schemaVersion: "messages-v1",
                 messages: [{ role: "user", content: [{ text: systemPrompt }] }],
                 inferenceConfig: {
-                    maxTokens: 500,
-                    temperature: 0.3
+                    maxTokens: 800,
+                    temperature: 0.1,  // 더 일관된 결과를 위해 낮춤
+                    topP: 0.9
                 }
             })
         };
@@ -437,24 +483,41 @@ async function generateMultilingualContent(title, content) {
         
         console.log('Nova Micro 응답:', aiResponse);
         
-        // JSON 파싱 시도
+        // JSON 파싱 시도 (더 관대한 파싱)
         try {
-            const jsonMatch = aiResponse.match(/\{.*\}/);
+            // 먼저 전체 응답에서 JSON 찾기
+            let jsonMatch = aiResponse.match(/\{[^}]*"title"[^}]*\}/);
+            if (!jsonMatch) {
+                // 더 넓은 범위로 JSON 찾기
+                jsonMatch = aiResponse.match(/\{.*?\}/s);
+            }
+            
             if (jsonMatch) {
-                const parsedData = JSON.parse(jsonMatch[0]);
+                let jsonStr = jsonMatch[0];
+                // 일반적인 JSON 정리
+                jsonStr = jsonStr
+                    .replace(/[\n\r\t]/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .replace(/,\s*}/g, '}')
+                    .trim();
+                
+                console.log('파싱할 JSON:', jsonStr);
+                const parsedData = JSON.parse(jsonStr);
+                
                 return {
                     ko: {
                         title: parsedData.title || title,
                         summary: cleanText(parsedData.summary || content),
                         target: parsedData.target || "모든 AWS 사용자",
                         features: parsedData.features || "자세한 내용은 원문을 참조하세요",
-                        regions: parsedData.regions || "지원 리전 정보 없음",
-                        status: parsedData.status || "일반 공개"
+                        regions: parsedData.regions || "해당 없음",
+                        status: parsedData.status || "정식 출시"
                     }
                 };
             }
         } catch (parseError) {
             console.error('JSON 파싱 오류:', parseError);
+            console.error('파싱 시도한 텍스트:', aiResponse);
         }
 
         // 파싱 실패 시 기본값 반환
