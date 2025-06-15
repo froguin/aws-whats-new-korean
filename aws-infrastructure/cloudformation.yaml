@@ -79,7 +79,9 @@ Resources:
               - Effect: Allow
                 Action:
                   - bedrock:InvokeModel
-                Resource: '*'
+                Resource: 
+                  - 'arn:aws:bedrock:ap-northeast-2::foundation-model/amazon.nova-micro-v1:0'
+                  - 'arn:aws:bedrock:ap-northeast-2::foundation-model/*'
 
   # API Gateway
   ApiGateway:
