@@ -35,6 +35,7 @@ export const handler = async (event) => {
 
         // EventBridge 배치 처리 요청인지 확인
         const isBatchRequest = event.source === 'eventbridge' && event.action === 'batch';
+        const forceRefresh = event.queryStringParameters?.refresh === 'true';
         
         if (isBatchRequest) {
             console.log('배치 처리 시작...');
@@ -48,28 +49,30 @@ export const handler = async (event) => {
         // 일반 API 요청 처리
         console.log('API 요청 처리 시작...');
         
-        // 캐시된 데이터 먼저 확인
-        const cachedItems = await getCachedItems();
-        
-        if (cachedItems.length > 0) {
-            console.log(`캐시된 데이터 반환: ${cachedItems.length}개 아이템`);
-            return {
-                statusCode: 200,
-                headers,
-                body: JSON.stringify({
-                    items: cachedItems,
-                    meta: {
-                        isCached: true,
-                        lastUpdated: new Date().toISOString(),
-                        itemCount: cachedItems.length
-                    }
-                })
-            };
+        // 강제 새로고침이 아닌 경우 캐시된 데이터 먼저 확인
+        if (!forceRefresh) {
+            const cachedItems = await getCachedItems();
+            
+            if (cachedItems.length > 0) {
+                console.log(`캐시된 데이터 반환: ${cachedItems.length}개 아이템`);
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({
+                        items: cachedItems,
+                        meta: {
+                            isCached: true,
+                            lastUpdated: new Date().toISOString(),
+                            itemCount: cachedItems.length
+                        }
+                    })
+                };
+            }
         }
 
-        // 캐시가 없는 경우에만 RSS 처리
-        console.log('캐시가 없어 RSS 피드 처리 시작...');
-        const processedItems = await processRSSFeed();
+        // 캐시가 없거나 강제 새로고침인 경우 RSS 처리
+        console.log('RSS 피드 처리 시작...');
+        const processedItems = await processRSSFeed(forceRefresh);
 
         return {
             statusCode: 200,
@@ -138,25 +141,21 @@ async function processRSSFeed(isBatchMode = false) {
             // DynamoDB에서 기존 아이템 확인
             const existingItem = await getItemFromDynamoDB(itemId);
             
-            if (existingItem && existingItem.koreanSummary && !isBatchMode) {
-                // 이미 한글 요약이 있고 배치 모드가 아닌 경우 그대로 사용
+            if (existingItem && existingItem.translations?.ko && !isBatchMode) {
+                // 이미 한국어 번역이 있고 배치 모드가 아닌 경우 그대로 사용
                 processedItems.push(formatItemForResponse(existingItem, item));
             } else {
                 // 새로운 아이템이거나 배치 모드인 경우 처리
                 console.log(`새 아이템 처리: ${item.title}`);
                 
-                // Nova Micro로 한글 요약 생성
-                const summaryData = await generateKoreanSummary(item.title, item.description);
+                // Nova Micro로 다국어 번역 생성
+                const translations = await generateMultilingualContent(item.title, item.description);
                 
                 const processedItem = {
                     id: itemId,
                     title: item.title,
                     originalContent: item.description,
-                    koreanSummary: summaryData.summary,
-                    target: summaryData.target,
-                    features: summaryData.features,
-                    regions: summaryData.regions,
-                    status: summaryData.status,
+                    translations: translations,
                     originalLink: item.link,
                     pubDate: new Date(item.published).toISOString(),
                     createdAt: new Date().toISOString()
@@ -172,20 +171,23 @@ async function processRSSFeed(isBatchMode = false) {
             processedItems.push({
                 id: generateItemId(item.link),
                 title: item.title,
-                date: new Date(item.published).getTime(),
+                date: new Date(item.published).toLocaleDateString('ko-KR', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                }),
                 content: item.description.replace(/<[^>]*>/g, '').trim(),
                 target: "모든 AWS 사용자",
                 features: "자세한 내용은 원문을 참조하세요",
                 regions: "지원 리전 정보 없음",
                 status: "일반 공개",
-                originalLink: item.link,
-                originalContent: item.description
+                originalLink: item.link
             });
         }
     }
 
     // 날짜순으로 정렬 (최신순)
-    processedItems.sort((a, b) => b.date - a.date);
+    processedItems.sort((a, b) => new Date(b.pubDate || 0) - new Date(a.pubDate || 0));
     return processedItems;
 }
 
@@ -207,21 +209,30 @@ async function getCachedItems() {
         const result = await dynamoClient.send(command);
         
         if (result.Items && result.Items.length > 0) {
-            const items = result.Items.map(item => ({
-                id: item.id.S,
-                title: item.title.S,
-                date: new Date(item.pubDate.S).getTime(),
-                content: item.koreanSummary?.S || item.originalContent.S,
-                target: item.target?.S || "모든 AWS 사용자",
-                features: item.features?.S || "자세한 내용은 원문을 참조하세요",
-                regions: item.regions?.S || "지원 리전 정보 없음",
-                status: item.itemStatus?.S || "일반 공개",
-                originalLink: item.originalLink.S,
-                originalContent: item.originalContent.S
-            }));
+            const items = result.Items.map(item => {
+                const translations = item.translations?.M || {};
+                const koTranslation = translations.ko?.M || {};
+                
+                return {
+                    id: item.id.S,
+                    title: koTranslation.title?.S || item.title.S,
+                    date: new Date(item.pubDate.S).toLocaleDateString('ko-KR', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                    }),
+                    content: koTranslation.summary?.S || item.originalContent.S.replace(/<[^>]*>/g, '').trim(),
+                    target: koTranslation.target?.S || "모든 AWS 사용자",
+                    features: koTranslation.features?.S || "자세한 내용은 원문을 참조하세요",
+                    regions: koTranslation.regions?.S || "지원 리전 정보 없음",
+                    status: koTranslation.status?.S || "일반 공개",
+                    originalLink: item.originalLink.S,
+                    pubDate: item.pubDate.S
+                };
+            });
 
             // 날짜순으로 정렬 (최신순)
-            return items.sort((a, b) => b.date - a.date);
+            return items.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
         }
         
         return [];
@@ -269,17 +280,24 @@ async function cleanupOldItems() {
 
 // 응답 형식으로 변환
 function formatItemForResponse(dbItem, rssItem = null) {
+    const translations = dbItem.translations || {};
+    const koTranslation = translations.ko || {};
+    
     return {
         id: dbItem.id,
-        title: dbItem.title,
-        date: new Date(dbItem.pubDate || (rssItem ? rssItem.published : new Date())).getTime(),
-        content: dbItem.koreanSummary || dbItem.originalContent,
-        target: dbItem.target || "모든 AWS 사용자",
-        features: dbItem.features || "자세한 내용은 원문을 참조하세요",
-        regions: dbItem.regions || "지원 리전 정보 없음",
-        status: dbItem.itemStatus || "일반 공개",
+        title: koTranslation.title || dbItem.title,
+        date: new Date(dbItem.pubDate || (rssItem ? rssItem.published : new Date())).toLocaleDateString('ko-KR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        }),
+        content: koTranslation.summary || dbItem.originalContent.replace(/<[^>]*>/g, '').trim(),
+        target: koTranslation.target || "모든 AWS 사용자",
+        features: koTranslation.features || "자세한 내용은 원문을 참조하세요",
+        regions: koTranslation.regions || "지원 리전 정보 없음",
+        status: koTranslation.status || "일반 공개",
         originalLink: dbItem.originalLink,
-        originalContent: dbItem.originalContent
+        pubDate: dbItem.pubDate
     };
 }
 
@@ -301,15 +319,22 @@ async function getItemFromDynamoDB(itemId) {
         const result = await dynamoClient.send(command);
         
         if (result.Item) {
+            const translations = {};
+            if (result.Item.translations?.M) {
+                Object.keys(result.Item.translations.M).forEach(lang => {
+                    const langData = result.Item.translations.M[lang].M;
+                    translations[lang] = {};
+                    Object.keys(langData).forEach(key => {
+                        translations[lang][key] = langData[key].S;
+                    });
+                });
+            }
+            
             return {
                 id: result.Item.id.S,
                 title: result.Item.title.S,
                 originalContent: result.Item.originalContent.S,
-                koreanSummary: result.Item.koreanSummary?.S,
-                target: result.Item.target?.S,
-                features: result.Item.features?.S,
-                regions: result.Item.regions?.S,
-                itemStatus: result.Item.itemStatus?.S,
+                translations: translations,
                 originalLink: result.Item.originalLink.S,
                 pubDate: result.Item.pubDate.S,
                 createdAt: result.Item.createdAt.S
@@ -323,10 +348,26 @@ async function getItemFromDynamoDB(itemId) {
     }
 }
 
-// DynamoDB에 아이템 저장
+// DynamoDB에 아이템 저장 (다국어 지원)
 async function saveItemToDynamoDB(item) {
     try {
         const ttl = Math.floor((Date.now() + CACHE_DURATION) / 1000);
+        
+        // 다국어 번역 데이터 구조화
+        const translationsMap = {};
+        Object.keys(item.translations).forEach(lang => {
+            const langData = item.translations[lang];
+            translationsMap[lang] = {
+                M: {
+                    title: { S: langData.title },
+                    summary: { S: langData.summary },
+                    target: { S: langData.target },
+                    features: { S: langData.features },
+                    regions: { S: langData.regions },
+                    status: { S: langData.status }
+                }
+            };
+        });
         
         const command = new PutItemCommand({
             TableName: DYNAMODB_TABLE,
@@ -334,11 +375,7 @@ async function saveItemToDynamoDB(item) {
                 id: { S: item.id },
                 title: { S: item.title },
                 originalContent: { S: item.originalContent },
-                koreanSummary: { S: item.koreanSummary },
-                target: { S: item.target },
-                features: { S: item.features },
-                regions: { S: item.regions },
-                itemStatus: { S: item.status },
+                translations: { M: translationsMap },
                 originalLink: { S: item.originalLink },
                 createdAt: { S: item.createdAt },
                 pubDate: { S: item.pubDate },
@@ -355,8 +392,8 @@ async function saveItemToDynamoDB(item) {
     }
 }
 
-// Nova Micro로 한글 요약 생성 (Netlify 버전 기반)
-async function generateKoreanSummary(title, content) {
+// Nova Micro로 다국어 번역 생성
+async function generateMultilingualContent(title, content) {
     try {
         const systemPrompt = `
 다음 AWS 업데이트 내용을 분석하여 한국어로 구조화된 정보를 제공해주세요.
@@ -369,10 +406,11 @@ async function generateKoreanSummary(title, content) {
 
 요구사항:
 1. 한국어로 자연스럽게 번역
-2. 기술 용어는 정확하게 유지
+2. 기술 용어는 정확하게 유지  
 3. HTML 태그 제거
 4. 단일 줄 JSON 형식
 5. 알 수 없는 정보는 "해당 없음" 표기
+6. AWS 서비스명은 원문 그대로 유지
 
 예시:
 {"title": "AWS Lambda 기능 개선", "summary": "AWS Lambda가 새로운 메모리 옵션과 고급 모니터링을 제공합니다.", "target": "서버리스 개발자", "features": "메모리 옵션, 모니터링", "regions": "모든 AWS 리전", "status": "정식 출시"}`;
@@ -397,18 +435,22 @@ async function generateKoreanSummary(title, content) {
         const responseBody = JSON.parse(new TextDecoder().decode(response.body));
         const aiResponse = responseBody.output?.message?.content?.[0]?.text || '';
         
+        console.log('Nova Micro 응답:', aiResponse);
+        
         // JSON 파싱 시도
         try {
             const jsonMatch = aiResponse.match(/\{.*\}/);
             if (jsonMatch) {
                 const parsedData = JSON.parse(jsonMatch[0]);
                 return {
-                    title: parsedData.title || title,
-                    summary: cleanText(parsedData.summary || content),
-                    target: parsedData.target || "모든 AWS 사용자",
-                    features: parsedData.features || "자세한 내용은 원문을 참조하세요",
-                    regions: parsedData.regions || "지원 리전 정보 없음",
-                    status: parsedData.status || "일반 공개"
+                    ko: {
+                        title: parsedData.title || title,
+                        summary: cleanText(parsedData.summary || content),
+                        target: parsedData.target || "모든 AWS 사용자",
+                        features: parsedData.features || "자세한 내용은 원문을 참조하세요",
+                        regions: parsedData.regions || "지원 리전 정보 없음",
+                        status: parsedData.status || "일반 공개"
+                    }
                 };
             }
         } catch (parseError) {
@@ -417,24 +459,28 @@ async function generateKoreanSummary(title, content) {
 
         // 파싱 실패 시 기본값 반환
         return {
-            title: title,
-            summary: cleanText(content),
-            target: "모든 AWS 사용자",
-            features: "자세한 내용은 원문을 참조하세요",
-            regions: "지원 리전 정보 없음",
-            status: "일반 공개"
+            ko: {
+                title: title,
+                summary: cleanText(content),
+                target: "모든 AWS 사용자",
+                features: "자세한 내용은 원문을 참조하세요",
+                regions: "지원 리전 정보 없음",
+                status: "일반 공개"
+            }
         };
 
     } catch (error) {
         console.error('Nova Micro 호출 중 오류:', error);
         // 오류 시 기본값 반환
         return {
-            title: title,
-            summary: cleanText(content),
-            target: "모든 AWS 사용자",
-            features: "자세한 내용은 원문을 참조하세요",
-            regions: "지원 리전 정보 없음",
-            status: "일반 공개"
+            ko: {
+                title: title,
+                summary: cleanText(content),
+                target: "모든 AWS 사용자",
+                features: "자세한 내용은 원문을 참조하세요",
+                regions: "지원 리전 정보 없음",
+                status: "일반 공개"
+            }
         };
     }
 }
