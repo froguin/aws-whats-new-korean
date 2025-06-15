@@ -156,7 +156,8 @@ async function processRSSFeed(isBatchMode = false) {
 
     for (const item of itemsToProcess) {
         try {
-            const itemId = generateItemId(item.link);
+            // GUID를 기반으로 고유 ID 생성 (중복 방지)
+            const itemId = generateItemId(item.guid || item.link);
             
             // DynamoDB에서 기존 아이템 확인
             const existingItem = await getItemFromDynamoDB(itemId);
@@ -178,6 +179,7 @@ async function processRSSFeed(isBatchMode = false) {
                 
                 const processedItem = {
                     id: itemId,
+                    guid: item.guid || '',
                     title: item.title,
                     originalContent: item.description,
                     translations: translations,
@@ -192,16 +194,16 @@ async function processRSSFeed(isBatchMode = false) {
                 processedCount++;
                 
                 // 배치 모드에서 API 호출 제한을 위한 지연
-                if (isBatchMode && processedCount % 5 === 0) {
-                    console.log(`${processedCount}개 처리 완료, 2초 대기...`);
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                if (isBatchMode && processedCount % 3 === 0) {
+                    console.log(`${processedCount}개 처리 완료, 3초 대기...`);
+                    await new Promise(resolve => setTimeout(resolve, 3000));
                 }
             }
         } catch (error) {
             console.error(`아이템 처리 중 오류 ${item.title}:`, error);
             // 에러가 발생한 아이템은 기본값으로 처리
             processedItems.push({
-                id: generateItemId(item.link),
+                id: generateItemId(item.guid || item.link),
                 title: item.title,
                 date: new Date(item.published).toLocaleDateString('ko-KR', {
                     year: 'numeric',
@@ -258,8 +260,8 @@ async function getCachedItems() {
                     content: koTranslation.summary?.S || item.originalContent.S.replace(/<[^>]*>/g, '').trim(),
                     target: koTranslation.target?.S || "모든 AWS 사용자",
                     features: koTranslation.features?.S || "자세한 내용은 원문을 참조하세요",
-                    regions: koTranslation.regions?.S || "지원 리전 정보 없음",
-                    status: koTranslation.status?.S || "일반 공개",
+                    regions: koTranslation.regions?.S || "해당 없음",
+                    status: koTranslation.status?.S || "정식 출시",
                     originalLink: item.originalLink.S,
                     pubDate: item.pubDate.S
                 };
@@ -328,16 +330,18 @@ function formatItemForResponse(dbItem, rssItem = null) {
         content: koTranslation.summary || dbItem.originalContent.replace(/<[^>]*>/g, '').trim(),
         target: koTranslation.target || "모든 AWS 사용자",
         features: koTranslation.features || "자세한 내용은 원문을 참조하세요",
-        regions: koTranslation.regions || "지원 리전 정보 없음",
-        status: koTranslation.status || "일반 공개",
+        regions: koTranslation.regions || "해당 없음",
+        status: koTranslation.status || "정식 출시",
         originalLink: dbItem.originalLink,
         pubDate: dbItem.pubDate
     };
 }
 
-// 아이템 ID 생성 함수
-function generateItemId(link) {
-    return Buffer.from(link).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 50);
+// 아이템 ID 생성 함수 (GUID 기반)
+function generateItemId(guidOrLink) {
+    // GUID가 있으면 GUID 사용, 없으면 링크 사용
+    const source = guidOrLink || '';
+    return Buffer.from(source).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 50);
 }
 
 // DynamoDB에서 아이템 조회
@@ -366,6 +370,7 @@ async function getItemFromDynamoDB(itemId) {
             
             return {
                 id: result.Item.id.S,
+                guid: result.Item.guid?.S || '',
                 title: result.Item.title.S,
                 originalContent: result.Item.originalContent.S,
                 translations: translations,
@@ -407,6 +412,7 @@ async function saveItemToDynamoDB(item) {
             TableName: DYNAMODB_TABLE,
             Item: {
                 id: { S: item.id },
+                guid: { S: item.guid },
                 title: { S: item.title },
                 originalContent: { S: item.originalContent },
                 translations: { M: translationsMap },
@@ -426,39 +432,42 @@ async function saveItemToDynamoDB(item) {
     }
 }
 
-// Nova Micro로 다국어 번역 생성 (Micro 모델 최적화)
+// Nova Micro로 다국어 번역 생성 (완전히 새로운 프롬프트)
 async function generateMultilingualContent(title, content) {
     try {
         // HTML 태그 제거 및 텍스트 정리
         const cleanContent = cleanText(content);
         
-        // Nova Micro에 최적화된 단계별 프롬프트
-        const systemPrompt = `당신은 AWS 기술 문서 번역 전문가입니다.
+        // 매우 구체적이고 단계별 프롬프트
+        const systemPrompt = `당신은 AWS 기술 문서 전문 번역가입니다.
 
-**작업**: 다음 AWS 업데이트를 한국어로 번역하고 구조화하세요.
+**임무**: 다음 AWS 업데이트를 한국어로 번역하고 구조화하세요.
 
-**원문 제목**: ${title}
-**원문 내용**: ${cleanContent.substring(0, 800)}
+**원문**:
+제목: ${title}
+내용: ${cleanContent.substring(0, 1000)}
 
-**번역 규칙**:
+**번역 지침**:
 1. AWS 서비스명은 영문 그대로 유지 (예: Amazon S3, AWS Lambda)
-2. 기술 용어는 정확히 번역 (예: region → 리전, instance → 인스턴스)
-3. 마케팅 문구보다 기술적 사실에 집중
-4. 간결하고 명확하게 표현
+2. 기술 용어 정확 번역 (region→리전, instance→인스턴스)
+3. 마케팅 문구 제거, 기술적 사실만 포함
+4. 자연스러운 한국어 표현 사용
 
-**출력 형식**: 정확히 다음 JSON 형식으로만 응답하세요.
-{"title":"한국어_제목","summary":"핵심_내용_요약_3문장_이내","target":"주요_대상_사용자","features":"핵심_기능_또는_변경사항","regions":"지원_리전_정보","status":"출시_상태"}
+**출력 형식**: 반드시 다음 JSON 형식으로만 응답하세요.
+{"title":"한국어_제목","summary":"핵심_내용_한국어_요약_3문장","target":"주요_대상_사용자","features":"핵심_기능_또는_개선사항","regions":"지원_리전_정보","status":"출시_상태"}
 
-**필드별 가이드**:
+**필드별 요구사항**:
 - title: 제목을 자연스러운 한국어로 번역
-- summary: 무엇이 새로워졌는지, 어떤 이점이 있는지 3문장 이내로 요약
-- target: 누가 사용할지 (예: "개발자", "데이터 엔지니어", "모든 사용자")
-- features: 주요 기능이나 개선사항을 간단히 (예: "새로운 API", "성능 향상")
-- regions: 어느 리전에서 사용 가능한지 (모르면 "해당 없음")
-- status: "정식 출시", "미리보기", "베타" 중 하나
+- summary: 무엇이 새로워졌는지 한국어로 3문장 이내 요약 (200자 이내)
+- target: 주요 사용자층 (예: "개발자", "데이터 엔지니어", "모든 사용자")
+- features: 주요 기능/개선사항을 간단히 (예: "새로운 API 지원", "성능 향상")
+- regions: 지원 리전 (예: "모든 AWS 리전", "미국 동부", "해당 없음")
+- status: 반드시 다음 중 하나만 사용 ("정식 출시", "미리보기", "베타")
 
 **예시**:
-{"title":"Amazon S3 새로운 스토리지 클래스 출시","summary":"Amazon S3에서 비용 효율적인 새로운 스토리지 클래스를 제공합니다. 자주 액세스하지 않는 데이터의 비용을 최대 40% 절감할 수 있습니다. 기존 S3 API와 완전 호환됩니다.","target":"모든 AWS 사용자","features":"새로운 스토리지 클래스, 비용 절감","regions":"모든 AWS 리전","status":"정식 출시"}`;
+{"title":"Amazon S3 새로운 스토리지 클래스 출시","summary":"Amazon S3에서 비용 효율적인 새로운 스토리지 클래스를 제공합니다. 자주 액세스하지 않는 데이터의 비용을 최대 40% 절감할 수 있습니다. 기존 S3 API와 완전 호환됩니다.","target":"모든 AWS 사용자","features":"새로운 스토리지 클래스, 비용 절감","regions":"모든 AWS 리전","status":"정식 출시"}
+
+지금 번역을 시작하세요:`;
 
         const params = {
             modelId: 'apac.amazon.nova-micro-v1:0',
@@ -468,8 +477,8 @@ async function generateMultilingualContent(title, content) {
                 schemaVersion: "messages-v1",
                 messages: [{ role: "user", content: [{ text: systemPrompt }] }],
                 inferenceConfig: {
-                    maxTokens: 800,
-                    temperature: 0.1,  // 더 일관된 결과를 위해 낮춤
+                    maxTokens: 1000,
+                    temperature: 0.1,
                     topP: 0.9
                 }
             })
@@ -504,14 +513,24 @@ async function generateMultilingualContent(title, content) {
                 console.log('파싱할 JSON:', jsonStr);
                 const parsedData = JSON.parse(jsonStr);
                 
+                // 상태 정규화
+                let status = parsedData.status || "정식 출시";
+                if (status.includes('preview') || status.includes('미리보기')) {
+                    status = "미리보기";
+                } else if (status.includes('beta') || status.includes('베타')) {
+                    status = "베타";
+                } else {
+                    status = "정식 출시";
+                }
+                
                 return {
                     ko: {
                         title: parsedData.title || title,
-                        summary: cleanText(parsedData.summary || content),
+                        summary: parsedData.summary || cleanText(content).substring(0, 200),
                         target: parsedData.target || "모든 AWS 사용자",
-                        features: parsedData.features || "자세한 내용은 원문을 참조하세요",
+                        features: parsedData.features || "새로운 기능 및 개선사항",
                         regions: parsedData.regions || "해당 없음",
-                        status: parsedData.status || "정식 출시"
+                        status: status
                     }
                 };
             }
@@ -524,11 +543,11 @@ async function generateMultilingualContent(title, content) {
         return {
             ko: {
                 title: title,
-                summary: cleanText(content),
+                summary: cleanText(content).substring(0, 200),
                 target: "모든 AWS 사용자",
-                features: "자세한 내용은 원문을 참조하세요",
-                regions: "지원 리전 정보 없음",
-                status: "일반 공개"
+                features: "새로운 기능 및 개선사항",
+                regions: "해당 없음",
+                status: "정식 출시"
             }
         };
 
@@ -538,11 +557,11 @@ async function generateMultilingualContent(title, content) {
         return {
             ko: {
                 title: title,
-                summary: cleanText(content),
+                summary: cleanText(content).substring(0, 200),
                 target: "모든 AWS 사용자",
-                features: "자세한 내용은 원문을 참조하세요",
-                regions: "지원 리전 정보 없음",
-                status: "일반 공개"
+                features: "새로운 기능 및 개선사항",
+                regions: "해당 없음",
+                status: "정식 출시"
             }
         };
     }
