@@ -80,7 +80,7 @@ Resources:
                 Action:
                   - bedrock:InvokeModel
                 Resource: 
-                  - 'arn:aws:bedrock:ap-northeast-2::foundation-model/amazon.nova-micro-v1:0'
+                  - 'arn:aws:bedrock:ap-northeast-2::foundation-model/apac.amazon.nova-micro-v1:0'
                   - 'arn:aws:bedrock:ap-northeast-2::foundation-model/*'
 
   # API Gateway

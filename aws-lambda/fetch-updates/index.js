@@ -168,7 +168,7 @@ async function invokeNovaMicroSummarization(title, description) {
     const systemPrompt = generateSystemPrompt(title, description);
     
     const params = {
-        modelId: 'amazon.nova-micro-v1:0', // Nova Micro 모델 (ap-northeast-2 지원)
+        modelId: 'apac.amazon.nova-micro-v1:0', // APAC Nova Micro inference profile
         contentType: 'application/json',
         accept: 'application/json',
         body: JSON.stringify({
