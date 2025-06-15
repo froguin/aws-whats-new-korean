@@ -7,6 +7,10 @@ interface Update {
   title: string;
   date: number;
   content: string;
+  target?: string;
+  features?: string;
+  regions?: string;
+  status?: string;
   originalLink?: string;
 }
 
@@ -108,6 +112,10 @@ try {
               title={update.title}
               date={update.date}
               content={update.content}
+              target={update.target}
+              features={update.features}
+              regions={update.regions}
+              status={update.status}
               originalLink={update.originalLink}
             />
           ))}

@@ -3,10 +3,14 @@ interface Props {
   title: string;
   date: number;
   content: string;
+  target?: string;
+  features?: string;
+  regions?: string;
+  status?: string;
   originalLink?: string;
 }
 
-const { title, date, content, originalLink } = Astro.props;
+const { title, date, content, target, features, regions, status, originalLink } = Astro.props;
 
 // 날짜 포맷팅
 const formatDate = (timestamp: number) => {
@@ -18,7 +22,20 @@ const formatDate = (timestamp: number) => {
   });
 };
 
+// 상태에 따른 배지 색상 결정
+const getStatusBadge = (status: string) => {
+  const statusLower = status?.toLowerCase() || '';
+  if (statusLower.includes('미리보기') || statusLower.includes('preview')) {
+    return { text: '미리보기', class: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200' };
+  } else if (statusLower.includes('베타') || statusLower.includes('beta')) {
+    return { text: '베타', class: 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200' };
+  } else {
+    return { text: '정식 출시', class: 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' };
+  }
+};
+
 const formattedDate = formatDate(date);
+const statusBadge = getStatusBadge(status || '정식 출시');
 ---
 
 <article class="update-card bg-white dark:bg-gray-800 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden">
@@ -27,8 +44,8 @@ const formattedDate = formatDate(date);
       <time datetime={new Date(date).toISOString()} class="text-sm font-medium text-gray-500 dark:text-gray-400">
         {formattedDate}
       </time>
-      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
-        새로운 기능
+      <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadge.class}`}>
+        {statusBadge.text}
       </span>
     </div>
     
@@ -36,10 +53,34 @@ const formattedDate = formatDate(date);
       {title}
     </h2>
     
-    <div class="prose prose-sm text-gray-600 dark:text-gray-300 mb-6">
+    <div class="prose prose-sm text-gray-600 dark:text-gray-300 mb-4">
       <div class="line-clamp-3 hover:line-clamp-none whitespace-pre-wrap">
         {content}
       </div>
+    </div>
+
+    <!-- 추가 정보 섹션 -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 text-sm">
+      {target && (
+        <div class="flex items-start space-x-2">
+          <span class="font-medium text-gray-500 dark:text-gray-400 min-w-0 flex-shrink-0">대상:</span>
+          <span class="text-gray-700 dark:text-gray-300">{target}</span>
+        </div>
+      )}
+      
+      {features && (
+        <div class="flex items-start space-x-2">
+          <span class="font-medium text-gray-500 dark:text-gray-400 min-w-0 flex-shrink-0">주요기능:</span>
+          <span class="text-gray-700 dark:text-gray-300">{features}</span>
+        </div>
+      )}
+      
+      {regions && (
+        <div class="flex items-start space-x-2">
+          <span class="font-medium text-gray-500 dark:text-gray-400 min-w-0 flex-shrink-0">지원리전:</span>
+          <span class="text-gray-700 dark:text-gray-300">{regions}</span>
+        </div>
+      )}
     </div>
   </div>
 

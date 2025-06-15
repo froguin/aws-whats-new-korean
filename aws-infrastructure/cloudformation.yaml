@@ -80,8 +80,9 @@ Resources:
                 Action:
                   - bedrock:InvokeModel
                 Resource: 
-                  - 'arn:aws:bedrock:ap-northeast-2::foundation-model/apac.amazon.nova-micro-v1:0'
-                  - 'arn:aws:bedrock:ap-northeast-2::foundation-model/*'
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/apac.amazon.nova-micro-v1:0'
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/*'
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/apac.amazon.nova-micro-v1:0'
 
   # API Gateway
   ApiGateway:
@@ -181,6 +182,28 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/*'
+
+  # EventBridge Rule for scheduled batch processing
+  BatchProcessingRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'aws-whats-new-batch-${Environment}'
+      Description: 'Scheduled batch processing for AWS updates'
+      ScheduleExpression: 'rate(6 hours)'  # 6시간마다 실행
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt LambdaFunction.Arn
+          Id: 'BatchProcessingTarget'
+          Input: '{"source": "eventbridge", "action": "batch"}'
+
+  # EventBridge Permission for Lambda
+  BatchProcessingPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref LambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt BatchProcessingRule.Arn
 
   # API Gateway Deployment
   ApiDeployment:
