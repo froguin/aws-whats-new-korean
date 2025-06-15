@@ -1,15 +1,17 @@
-import { DynamoDBClient, GetItemCommand, PutItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
-import { parse } from 'rss-to-json';
+import rssToJson from 'rss-to-json';
+
+const { parse } = rssToJson;
 
 const RSS_URL = 'https://aws.amazon.com/about-aws/whats-new/recent/feed/';
 const CACHE_KEY = 'aws-updates-v2';
 const CACHE_TTL_DAY = 30;
 const MAX_ITEMS_TO_PROCESS = 30;
 
-// AWS 클라이언트 초기화
-const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
+// AWS 클라이언트 초기화 (리전은 자동으로 감지됨)
+const dynamoClient = new DynamoDBClient({});
+const bedrockClient = new BedrockRuntimeClient({});
 
 export const handler = async (event) => {
     const headers = {

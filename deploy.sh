@@ -8,16 +8,21 @@ echo "🚀 AWS What's New Korean 배포 시작..."
 
 # 환경 변수 확인
 if [ -z "$AWS_REGION" ]; then
-    export AWS_REGION="us-east-1"
+    export AWS_REGION="ap-northeast-2"
 fi
 
 if [ -z "$ENVIRONMENT" ]; then
     export ENVIRONMENT="prod"
 fi
 
+if [ -z "$AWS_PROFILE" ]; then
+    export AWS_PROFILE="aws-whats-new"
+fi
+
 echo "📋 환경 설정:"
 echo "  - AWS Region: $AWS_REGION"
 echo "  - Environment: $ENVIRONMENT"
+echo "  - AWS Profile: $AWS_PROFILE"
 
 # 1. CloudFormation 스택 배포
 echo "🏗️  인프라 배포 중..."
@@ -26,13 +31,15 @@ aws cloudformation deploy \
     --stack-name aws-whats-new-infrastructure-$ENVIRONMENT \
     --capabilities CAPABILITY_NAMED_IAM \
     --parameter-overrides Environment=$ENVIRONMENT \
-    --region $AWS_REGION
+    --region $AWS_REGION \
+    --profile $AWS_PROFILE
 
 # 스택 출력값 가져오기
 echo "📊 스택 정보 조회 중..."
 STACK_OUTPUTS=$(aws cloudformation describe-stacks \
     --stack-name aws-whats-new-infrastructure-$ENVIRONMENT \
     --region $AWS_REGION \
+    --profile $AWS_PROFILE \
     --query 'Stacks[0].Outputs' \
     --output json)
 
@@ -51,40 +58,22 @@ npm install --production
 zip -r ../fetch-updates.zip . -x "*.git*" "node_modules/.cache/*"
 cd ../..
 
-# Lambda 함수 생성 또는 업데이트
-FUNCTION_NAME="aws-whats-new-fetch-updates-$ENVIRONMENT"
+# Lambda 함수 코드 업데이트 (CloudFormation에서 이미 생성됨)
+FUNCTION_NAME=$(echo $STACK_OUTPUTS | jq -r '.[] | select(.OutputKey=="LambdaFunctionName") | .OutputValue')
 
-if aws lambda get-function --function-name $FUNCTION_NAME --region $AWS_REGION >/dev/null 2>&1; then
-    echo "🔄 Lambda 함수 업데이트 중..."
-    aws lambda update-function-code \
-        --function-name $FUNCTION_NAME \
-        --zip-file fileb://aws-lambda/fetch-updates.zip \
-        --region $AWS_REGION
-else
-    echo "🆕 Lambda 함수 생성 중..."
-    aws lambda create-function \
-        --function-name $FUNCTION_NAME \
-        --runtime nodejs18.x \
-        --role $LAMBDA_ROLE_ARN \
-        --handler index.handler \
-        --zip-file fileb://aws-lambda/fetch-updates.zip \
-        --timeout 300 \
-        --memory-size 512 \
-        --environment Variables="{DYNAMODB_TABLE=$DYNAMODB_TABLE,AWS_REGION=$AWS_REGION}" \
-        --region $AWS_REGION
-fi
+echo "🔄 Lambda 함수 코드 업데이트 중..."
+aws lambda update-function-code \
+    --function-name $FUNCTION_NAME \
+    --zip-file fileb://aws-lambda/fetch-updates.zip \
+    --region $AWS_REGION \
+    --profile $AWS_PROFILE
 
-# 3. API Gateway 설정
-echo "🌐 API Gateway 설정 중..."
-# 여기서 API Gateway 리소스 및 메서드 설정
-# (CloudFormation 템플릿에서 완전히 정의하거나 별도 스크립트로 분리 가능)
-
-# 4. 정적 사이트 빌드
+# 3. 정적 사이트 빌드
 echo "🏗️  정적 사이트 빌드 중..."
 npm install
 npm run build
 
-# 5. S3에 정적 사이트 배포 (선택사항)
+# 4. S3에 정적 사이트 배포 (선택사항)
 if [ "$DEPLOY_TO_S3" = "true" ]; then
     echo "☁️  S3에 정적 사이트 배포 중..."
     if [ -z "$S3_BUCKET" ]; then
@@ -92,14 +81,15 @@ if [ "$DEPLOY_TO_S3" = "true" ]; then
         exit 1
     fi
     
-    aws s3 sync dist/ s3://$S3_BUCKET --delete --region $AWS_REGION
+    aws s3 sync dist/ s3://$S3_BUCKET --delete --region $AWS_REGION --profile $AWS_PROFILE
     
     # CloudFront 무효화 (선택사항)
     if [ -n "$CLOUDFRONT_DISTRIBUTION_ID" ]; then
         echo "🔄 CloudFront 캐시 무효화 중..."
         aws cloudfront create-invalidation \
             --distribution-id $CLOUDFRONT_DISTRIBUTION_ID \
-            --paths "/*"
+            --paths "/*" \
+            --profile $AWS_PROFILE
     fi
 fi
 
