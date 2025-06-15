@@ -224,10 +224,10 @@ async function processRSSFeed() {
 
 // RSS XML 직접 가져오기
 async function fetchRSSXML() {
-    const https = require('https');
+    const https = await import('https');
     
     return new Promise((resolve, reject) => {
-        https.get('https://aws.amazon.com/about-aws/whats-new/recent/feed/', (res) => {
+        https.default.get('https://aws.amazon.com/about-aws/whats-new/recent/feed/', (res) => {
             let data = '';
             res.on('data', (chunk) => {
                 data += chunk;
