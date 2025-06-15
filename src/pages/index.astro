@@ -119,33 +119,35 @@ try {
   <!-- 클라이언트 사이드 검색 스크립트 -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      const searchInput = document.getElementById('keyword-search');
+      const searchInput = document.getElementById('keyword-search') as HTMLInputElement;
       const cards = document.querySelectorAll('.update-card');
       
-      searchInput.addEventListener('input', () => {
-        const keyword = searchInput.value.toLowerCase().trim();
-        let visibleCount = 0;
-        
-        cards.forEach(card => {
-          const cardText = card.textContent.toLowerCase();
-          const isVisible = keyword === '' || cardText.includes(keyword);
+      if (searchInput) {
+        searchInput.addEventListener('input', () => {
+          const keyword = searchInput.value.toLowerCase().trim();
+          let visibleCount = 0;
           
-          card.style.display = isVisible ? 'block' : 'none';
-          if (isVisible) visibleCount++;
-        });
+          cards.forEach(card => {
+            const cardText = card.textContent?.toLowerCase() || '';
+            const isVisible = keyword === '' || cardText.includes(keyword);
+            
+            (card as HTMLElement).style.display = isVisible ? 'block' : 'none';
+            if (isVisible) visibleCount++;
+          });
 
-        // 검색 결과 없을 때 메시지 표시
-        const noResultsMessage = document.getElementById('no-results-message');
-        const totalCardsContainer = document.getElementById('update-cards-container');
-        
-        if (visibleCount === 0) {
-          noResultsMessage.classList.remove('hidden');
-          totalCardsContainer.classList.add('hidden');
-        } else {
-          noResultsMessage.classList.add('hidden');
-          totalCardsContainer.classList.remove('hidden');
-        }
-      });
+          // 검색 결과 없을 때 메시지 표시
+          const noResultsMessage = document.getElementById('no-results-message');
+          const totalCardsContainer = document.getElementById('update-cards-container');
+          
+          if (visibleCount === 0) {
+            noResultsMessage?.classList.remove('hidden');
+            totalCardsContainer?.classList.add('hidden');
+          } else {
+            noResultsMessage?.classList.add('hidden');
+            totalCardsContainer?.classList.remove('hidden');
+          }
+        });
+      }
     });
   </script>
 </Layout>
