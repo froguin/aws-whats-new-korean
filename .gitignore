@@ -25,3 +25,6 @@ pnpm-debug.log*
 # amplify backend files (not needed for static site)
 amplify/
 .amplify/
+
+# lambda zip files
+aws-lambda/*.zip
