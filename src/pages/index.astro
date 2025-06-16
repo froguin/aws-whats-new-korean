@@ -92,7 +92,7 @@ import Layout from '../layouts/Layout.astro';
   </div>
 
   <script is:inline>
-    const API_URL = 'https://zk0eyxbdxc.execute-api.ap-northeast-2.amazonaws.com/prod';
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'https://zk0eyxbdxc.execute-api.ap-northeast-2.amazonaws.com/prod';
     let allUpdates = [];
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -192,6 +192,13 @@ import Layout from '../layouts/Layout.astro';
         
         const data = await response.json();
         allUpdates = data.items || [];
+        
+        // pubDate 기준으로 최신순 정렬
+        allUpdates.sort((a, b) => {
+          const dateA = new Date(a.pubDate || a.publishedAt || 0);
+          const dateB = new Date(b.pubDate || b.publishedAt || 0);
+          return dateB - dateA; // 최신순 (내림차순)
+        });
         
         updateMetaInfo(data.meta);
         renderCards(allUpdates);

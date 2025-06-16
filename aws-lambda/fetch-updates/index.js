@@ -99,7 +99,15 @@ async function fetchAndProcessRSSFeed() {
 
         // 모든 RSS 아이템 처리
         const itemsToProcess = rssData.items.slice(0, maxItems);
-        console.log(`처리할 아이템 수: ${itemsToProcess.length}개`);
+        
+        // pubDate 기준으로 최신순 정렬 (처리 전에 미리 정렬)
+        itemsToProcess.sort((a, b) => {
+            const dateA = new Date(a.pubDate || 0);
+            const dateB = new Date(b.pubDate || 0);
+            return dateB - dateA; // 최신순
+        });
+        
+        console.log(`처리할 아이템 수: ${itemsToProcess.length}개 (최신순 정렬 완료)`);
 
         for (let i = 0; i < itemsToProcess.length; i++) {
             const item = itemsToProcess[i];
@@ -114,10 +122,12 @@ async function fetchAndProcessRSSFeed() {
                 
                 // 기존 아이템 확인
                 const existingItem = await getItemFromDynamoDB(itemId);
-                if (existingItem) {
-                    console.log('이미 존재하는 아이템, 건너뛰기');
+                if (existingItem && existingItem.translatedSummary && existingItem.translatedSummary !== 'null') {
+                    console.log('이미 번역된 아이템, 건너뛰기');
                     processedItems.push(existingItem);
                     continue;
+                } else if (existingItem) {
+                    console.log('번역이 없는 기존 아이템, 번역 업데이트 진행');
                 }
                 
                 // Nova Micro로 전체 번역 및 분석
@@ -247,35 +257,34 @@ async function translateWithNovaMicro(title, content) {
         const cleanContent = cleanText(content);
         const shortContent = cleanContent.substring(0, 800); // 더 많은 컨텍스트 제공
         
-        // 고품질 한국어 번역 프롬프트 - 기존 Netlify 버전 품질 복원
-        const prompt = `
-당신은 AWS 전문 기술 번역가입니다. 다음 AWS 업데이트를 완벽한 한국어로 번역하고 요약해주세요.
+        console.log('프롬프트 매니지먼트 템플릿으로 Nova Micro 직접 호출 중...');
+        console.log('전달할 변수:', { title: title.substring(0, 100), description: shortContent.substring(0, 100) });
 
-원문:
-제목: ${title}
-내용: ${shortContent}
+        // 프롬프트 매니지먼트에서 가져온 정확한 프롬프트 템플릿 사용
+        const promptTemplate = `You are an expert in analyzing AWS service updates and providing concise, structured summaries for Korean-speaking AWS users.
 
-번역 규칙:
-1. 제목을 자연스러운 한국어로 완전 번역 (AWS 서비스명만 영어 유지)
-2. 내용을 한국 개발자가 바로 이해할 수 있는 한국어로 요약
-3. 기술적 세부사항과 실제 활용 방안 포함
-4. "업데이트가 있었습니다" 같은 불필요한 문구 절대 사용 금지
-5. 구체적이고 실용적인 정보만 제공
+Original Title: ${title}
+Original Description: ${shortContent}
 
-JSON 응답:
+Please provide a **single-line JSON-formatted response** with the following structure:
 {
-  "title": "완전한 한국어 제목 (서비스명만 영어)",
-  "summary": "핵심 기능과 장점을 구체적으로 설명한 한국어 요약 (2-3문장)",
-  "target": "개발자|시스템관리자|데이터엔지니어|보안담당자|모든사용자",
-  "features": "새기능|성능개선|보안강화|비용최적화|API개선",
-  "regions": "전체리전|미국리전|유럽리전|아시아태평양|선택리전|해당없음",
-  "status": "정식출시|미리보기|베타"
+  "title": "한국어로 번역된 명확하고 간결한 제목",
+  "summary": "3-4문장으로 주요 업데이트 내용을 한국어로 요약 (250자 이하)",
+  "target": "이 업데이트의 주요 대상 사용자 그룹 (단일 문장)",
+  "features": "주요 기능 또는 변경 사항 요약 (100자 이하)",
+  "regions": "지원되는 AWS 리전 (알려진 경우, 없으면 '해당 없음')",
+  "status": "현재 상태 (예: 정식 출시 ('일반 공개'인 경우도 정식 출시로 표시합니다), 미리보기 ('프리뷰' 또는 '미리보기 단계'인 경우도 미리보기로 표기합니다) 등으로 표기합니다)"
 }
 
-JSON만 응답하세요.`;
+**Important Guidelines:**
+1. 응답은 **단일 줄**로 작성하고 줄바꿈이나 탭 문자를 사용하지 마십시오.
+2. 각 필드 값은 평문 문자열로 작성하고 중첩된 JSON을 포함하지 마십시오.
+3. 모든 필드는 JSON.parse()로 바로 파싱 가능해야 합니다.
+4. 알 수 없는 정보는 "알 수 없음" 또는 "해당 없음"으로 작성하십시오.
+5. 응답은 **최대 300자**를 넘지 않도록 간결하게 작성하십시오.
+6. 번역 시에 AWS 또는 Amazon 으로 시작하는 제품명은 원문 그대로 표현하는 것이 좋습니다.`;
 
-        console.log('Nova Micro 호출 중...');
-
+        // Nova Micro 직접 호출
         const params = {
             modelId: 'apac.amazon.nova-micro-v1:0',
             contentType: 'application/json',
@@ -284,11 +293,11 @@ JSON만 응답하세요.`;
                 schemaVersion: "messages-v1",
                 messages: [{ 
                     role: "user", 
-                    content: [{ text: prompt }] 
+                    content: [{ text: promptTemplate }] 
                 }],
                 inferenceConfig: {
                     maxTokens: 800,
-                    temperature: 0.1, // 일관성을 위해 낮게 설정
+                    temperature: 0.1,
                     topP: 0.9
                 }
             })
@@ -298,7 +307,20 @@ JSON만 응답하세요.`;
         const response = await bedrockClient.send(command);
         
         const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-        const aiResponse = responseBody.output?.message?.content?.[0]?.text || '';
+        console.log('Nova Micro 직접 호출 응답 구조:', JSON.stringify(responseBody, null, 2));
+        
+        // Nova Micro 직접 호출 응답에서 텍스트 추출
+        let aiResponse = '';
+        if (responseBody && responseBody.output && responseBody.output.message) {
+            aiResponse = responseBody.output.message.content[0]?.text || '';
+        } else if (responseBody && responseBody.content) {
+            aiResponse = responseBody.content[0]?.text || '';
+        } else if (responseBody && responseBody.completion) {
+            aiResponse = responseBody.completion;
+        } else {
+            console.log('알 수 없는 응답 구조, 전체 응답 사용');
+            aiResponse = JSON.stringify(responseBody);
+        }
         
         console.log('Nova Micro 응답 길이:', aiResponse.length);
         console.log('Nova Micro 응답 미리보기:', aiResponse.substring(0, 200) + '...');
@@ -432,7 +454,7 @@ async function getCachedItems() {
         const result = await dynamoClient.send(command);
         
         if (result.Items && result.Items.length > 0) {
-            return result.Items.map(item => ({
+            const items = result.Items.map(item => ({
                 id: item.id?.S || '',
                 title: item.title?.S || '',
                 date: item.date?.S || '',
@@ -444,6 +466,15 @@ async function getCachedItems() {
                 originalLink: item.originalLink?.S || '',
                 pubDate: item.pubDate?.S || ''
             }));
+            
+            // pubDate 기준으로 최신순 정렬 (내림차순)
+            items.sort((a, b) => {
+                const dateA = new Date(a.pubDate || 0);
+                const dateB = new Date(b.pubDate || 0);
+                return dateB - dateA; // 최신순
+            });
+            
+            return items;
         }
         
         return [];
