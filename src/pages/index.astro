@@ -92,7 +92,8 @@ import Layout from '../layouts/Layout.astro';
   </div>
 
   <script is:inline>
-    const API_URL = import.meta.env.PUBLIC_API_URL || 'https://zk0eyxbdxc.execute-api.ap-northeast-2.amazonaws.com/prod';
+    // API URL 설정
+    const API_URL = 'https://zk0eyxbdxc.execute-api.ap-northeast-2.amazonaws.com/prod';
     let allUpdates = [];
 
     document.addEventListener('DOMContentLoaded', () => {
