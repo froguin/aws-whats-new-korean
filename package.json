@@ -9,16 +9,12 @@
     "preview": "astro preview",
     "astro": "astro",
     "deploy:lambda": "cd aws-lambda/fetch-updates && npm install && zip -r ../fetch-updates.zip . && aws lambda update-function-code --function-name aws-whats-new-fetch-updates --zip-file fileb://../fetch-updates.zip",
-    "deploy:infrastructure": "aws cloudformation deploy --template-file aws-infrastructure/cloudformation.yaml --stack-name aws-whats-new-infrastructure --capabilities CAPABILITY_NAMED_IAM --parameter-overrides Environment=prod",
-    "amplify:sandbox": "npx ampx sandbox",
-    "amplify:deploy": "npx ampx pipeline-deploy --branch preview"
+    "deploy:infrastructure": "aws cloudformation deploy --template-file aws-infrastructure/cloudformation.yaml --stack-name aws-whats-new-infrastructure --capabilities CAPABILITY_NAMED_IAM --parameter-overrides Environment=prod"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
     "astro": "^4.16.16",
-    "typescript": "^5.7.2",
-    "@aws-amplify/backend": "^1.0.0",
-    "@aws-amplify/backend-cli": "^1.0.0"
+    "typescript": "^5.7.2"
   },
   "devDependencies": {
     "@astrojs/tailwind": "^5.1.2",
