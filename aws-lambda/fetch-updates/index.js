@@ -50,17 +50,31 @@ export const handler = async (event) => {
             }
         }
 
-        // 응답 생성
+        // API 응답용 데이터 필터링 (원문 데이터 제외)
+        const filteredItems = items.map(item => ({
+            id: item.id,
+            title: item.title,
+            date: item.date,
+            content: item.content,
+            target: item.target,
+            features: item.features,
+            regions: item.regions,
+            status: item.status,
+            originalLink: item.originalLink,
+            pubDate: item.pubDate
+        }));
+
+        // 응답 생성 (간단하게)
         const response = {
-            items: items.slice(0, 100), // 최대 100개 반환
+            items: filteredItems.slice(0, 100), // 최대 100개 반환
             meta: {
                 isCached,
                 lastUpdated: new Date().toISOString(),
-                itemCount: items.length
+                itemCount: filteredItems.length
             }
         };
 
-        console.log(`총 ${items.length}개 아이템 반환 (캐시됨: ${isCached})`);
+        console.log(`총 ${filteredItems.length}개 아이템 반환 (캐시됨: ${isCached})`);
 
         return {
             statusCode: 200,
@@ -145,7 +159,10 @@ async function fetchAndProcessRSSFeed() {
                     regions: translation.regions,
                     status: translation.status,
                     originalLink: item.link,
-                    pubDate: item.pubDate
+                    pubDate: item.pubDate,
+                    // 원문 데이터 백업 (최소한만)
+                    originalTitle: item.title || '',
+                    originalDescription: item.description || ''
                 };
                 
                 // DynamoDB에 저장
@@ -464,7 +481,10 @@ async function getCachedItems() {
                 regions: item.regions?.S || '',
                 status: item.status?.S || '',
                 originalLink: item.originalLink?.S || '',
-                pubDate: item.pubDate?.S || ''
+                pubDate: item.pubDate?.S || '',
+                // 원문 데이터 (필수만)
+                originalTitle: item.originalTitle?.S || '',
+                originalDescription: item.originalDescription?.S || ''
             }));
             
             // pubDate 기준으로 최신순 정렬 (내림차순)
@@ -507,7 +527,10 @@ async function getItemFromDynamoDB(itemId) {
                 regions: result.Item.regions?.S || '',
                 status: result.Item.status?.S || '',
                 originalLink: result.Item.originalLink?.S || '',
-                pubDate: result.Item.pubDate?.S || ''
+                pubDate: result.Item.pubDate?.S || '',
+                // 원문 데이터 (필수만)
+                originalTitle: result.Item.originalTitle?.S || '',
+                originalDescription: result.Item.originalDescription?.S || ''
             };
         }
         
@@ -536,6 +559,9 @@ async function saveItemToDynamoDB(item) {
                 status: { S: item.status },
                 originalLink: { S: item.originalLink },
                 pubDate: { S: item.pubDate },
+                // 원문 데이터 백업 (필수만)
+                originalTitle: { S: item.originalTitle || '' },
+                originalDescription: { S: item.originalDescription || '' },
                 ttl: { N: ttl.toString() },
                 createdAt: { S: new Date().toISOString() }
             }
