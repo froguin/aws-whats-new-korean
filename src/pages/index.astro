@@ -31,8 +31,8 @@ let meta: Meta | null = null;
 let errorMessage: string | null = null;
 
 try {
-  // AWS Lambda API 사용
-  const response = await fetch('https://zk0eyxbdxc.execute-api.ap-northeast-2.amazonaws.com/prod/updates', {
+  const baseUrl = Astro.url.origin;
+  const response = await fetch(`${baseUrl}/.netlify/functions/fetch-updates`, {
     method: 'GET',
     headers: {
       'Accept': 'application/json',

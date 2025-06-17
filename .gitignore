@@ -12,6 +12,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+
 # environment variables
 .env
 .env.production
@@ -21,10 +22,3 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
-
-# amplify backend files (not needed for static site)
-amplify/
-.amplify/
-
-# lambda zip files
-aws-lambda/*.zip
