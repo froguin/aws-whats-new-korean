@@ -18,7 +18,14 @@ const { title, date, content, target, features, regions, status = '정식 출시
     <div class="flex items-start justify-between mb-3">
       <div class="flex-1">
         <div class="flex items-center gap-2 mb-2">
-          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[#037f0c] text-white">
+          <span class:list={[
+            "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
+            status.includes('미리보기') || status.includes('Preview') 
+              ? "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200"
+              : status.includes('베타') || status.includes('Beta')
+              ? "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+              : "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200"
+          ]}>
             {status}
           </span>
           <time class="text-xs text-[#5f6b7a] dark:text-[#9ba7b6]">{date}</time>
