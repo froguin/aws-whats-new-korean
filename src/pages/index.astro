@@ -1,6 +1,6 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import UpdateCard from '../components/UpdateCard.astro';
+import UpdateCardCloudscape from '../components/UpdateCardCloudscape.astro';
 
 interface Update {
   title: string;
@@ -142,7 +142,7 @@ const clientSideScript = `
           {updates.length > 0 ? (
             updates.map((update) => (
               <div class="update-card">
-                <UpdateCard {...update} />
+                <UpdateCardCloudscape {...update} />
               </div>
             ))
           ) : (
