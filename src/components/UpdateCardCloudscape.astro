@@ -1,0 +1,98 @@
+---
+interface Props {
+  title: string;
+  date: string;
+  content: string;
+  target?: string;
+  features?: string;
+  regions?: string;
+  status?: string;
+  originalLink?: string;
+}
+
+const { title, date, content, target, features, regions, status = '정식 출시', originalLink } = Astro.props;
+---
+
+<article class="group bg-white dark:bg-[#0f1b2a] rounded-lg border border-[#e9ebed] dark:border-[#414d5c] hover:border-[#0972d3] dark:hover:border-[#539fe5] transition-all duration-200 overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1">
+  <div class="p-5">
+    <div class="flex items-start justify-between mb-3">
+      <div class="flex-1">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[#037f0c] text-white">
+            {status}
+          </span>
+          <time class="text-xs text-[#5f6b7a] dark:text-[#9ba7b6]">{date}</time>
+        </div>
+        <h3 class="text-base font-bold text-[#000716] dark:text-[#ffffff] mb-2 line-clamp-2 leading-snug">
+          {title}
+        </h3>
+      </div>
+    </div>
+    
+    <p class="text-sm text-[#5f6b7a] dark:text-[#9ba7b6] mb-4 line-clamp-3 group-hover:line-clamp-none leading-relaxed transition-all duration-200">
+      {content}
+    </p>
+    
+    <div class="space-y-2.5 pt-3 border-t border-[#e9ebed] dark:border-[#414d5c]">
+      {target && (
+        <div class="flex items-start gap-2">
+          <div class="flex-shrink-0 w-4 h-4 mt-0.5">
+            <svg viewBox="0 0 16 16" fill="none" class="w-full h-full">
+              <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1" fill="none" class="text-[#0972d3] dark:text-[#539fe5]"/>
+              <path d="M8 4v4l3 2" stroke="currentColor" stroke-width="1" stroke-linecap="round" class="text-[#0972d3] dark:text-[#539fe5]"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-xs font-medium text-[#000716] dark:text-[#ffffff] mb-0.5">대상</div>
+            <div class="text-xs text-[#5f6b7a] dark:text-[#9ba7b6]">{target}</div>
+          </div>
+        </div>
+      )}
+      
+      {features && (
+        <div class="flex items-start gap-2">
+          <div class="flex-shrink-0 w-4 h-4 mt-0.5">
+            <svg viewBox="0 0 16 16" fill="none" class="w-full h-full">
+              <path d="M13.854 4.146a.5.5 0 010 .708l-7 7a.5.5 0 01-.708 0l-3.5-3.5a.5.5 0 11.708-.708L6.5 10.793l6.646-6.647a.5.5 0 01.708 0z" fill="currentColor" class="text-[#0972d3] dark:text-[#539fe5]"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-xs font-medium text-[#000716] dark:text-[#ffffff] mb-0.5">주요 기능</div>
+            <div class="text-xs text-[#5f6b7a] dark:text-[#9ba7b6]">{features}</div>
+          </div>
+        </div>
+      )}
+      
+      {regions && (
+        <div class="flex items-start gap-2">
+          <div class="flex-shrink-0 w-4 h-4 mt-0.5">
+            <svg viewBox="0 0 16 16" fill="none" class="w-full h-full">
+              <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1" fill="none" class="text-[#0972d3] dark:text-[#539fe5]"/>
+              <circle cx="8" cy="8" r="2" fill="currentColor" class="text-[#0972d3] dark:text-[#539fe5]"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-xs font-medium text-[#000716] dark:text-[#ffffff] mb-0.5">지원 리전</div>
+            <div class="text-xs text-[#5f6b7a] dark:text-[#9ba7b6]">{regions}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+  
+  {originalLink && (
+    <div class="px-5 py-3 bg-[#fafafa] dark:bg-[#16232e] border-t border-[#e9ebed] dark:border-[#414d5c] group-hover:bg-[#0972d3]/10 dark:group-hover:bg-[#0972d3]/20 transition-colors duration-200">
+      <a 
+        href={originalLink}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-flex items-center gap-1 text-sm font-medium text-[#0972d3] dark:text-[#539fe5] hover:text-[#033160] dark:hover:text-[#9cc4e4] hover:underline transition-colors"
+      >
+        자세히 보기
+        <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+          <path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+    </div>
+  )}
+</article>
