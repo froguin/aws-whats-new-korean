@@ -8,9 +8,6 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "@astrojs/check": "^0.9.4",
-    "@aws-sdk/client-dynamodb": "^3.700.0",
-    "@aws-sdk/lib-dynamodb": "^3.700.0",
     "astro": "^5.0.0",
     "typescript": "^5.7.2"
   },

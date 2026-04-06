@@ -81,10 +81,26 @@ translator.addToRolePolicy(new iam.PolicyStatement({
 }));
 translator.addEventSource(new lambdaEventSources.SqsEventSource(queue, { batchSize: 1 }));
 
-// ── Outputs (for Astro SSR API routes) ──
+// ── Lambda: API (Function URL) ──
+const api = new lambda.Function(stack, 'Api', {
+  runtime: lambda.Runtime.NODEJS_20_X,
+  handler: 'index.handler',
+  code: lambda.Code.fromAsset(path.join(__dirname, '..', 'functions', 'api')),
+  timeout: Duration.seconds(30),
+  memorySize: 256,
+  environment: { TABLE_NAME: table.tableName },
+});
+table.grantReadData(api);
+const apiUrl = api.addFunctionUrl({
+  authType: lambda.FunctionUrlAuthType.NONE,
+  cors: { allowedOrigins: ['*'], allowedMethods: [lambda.HttpMethod.GET] },
+});
+
+// ── Outputs ──
 backend.addOutput({
   custom: {
     tableName: table.tableName,
     queueUrl: queue.queueUrl,
+    apiUrl: apiUrl.url,
   },
 });
