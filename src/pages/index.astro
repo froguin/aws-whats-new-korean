@@ -32,20 +32,24 @@ let errorMessage: string | null = null;
 
 try {
   const baseUrl = Astro.url.origin;
-  const response = await fetch(`${baseUrl}/.netlify/functions/fetch-updates`, {
-    method: 'GET',
-    headers: {
-      'Accept': 'application/json',
-    },
-  });
+  const response = await fetch(`${baseUrl}/api/articles?lang=ko&limit=50`);
   
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   
   const data = await response.json();
-  updates = data.items;
-  meta = data.meta;
+  updates = data.items.map((item: any) => ({
+    title: item.title,
+    date: item.pubDate ? new Date(item.pubDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }) : '',
+    content: item.summary,
+    target: item.target,
+    features: item.features,
+    regions: item.regions,
+    status: (() => { try { const s = JSON.parse(item.status); return Array.isArray(s) ? s.join(', ') : item.status; } catch { return item.status; } })(),
+    originalLink: item.url,
+  }));
+  meta = { isCached: false, lastUpdated: new Date().toISOString(), itemCount: data.count };
 } catch (e) {
   console.error('데이터를 가져오는 중 오류가 발생했습니다:', e);
   errorMessage = e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다';

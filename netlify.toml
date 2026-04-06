@@ -1,9 +1,0 @@
-[build]
-  command = "mkdir -p dist"
-  publish = "dist"
-
-[[redirects]]
-  from = "/*"
-  to = "https://whats-new.kr/aws"
-  status = 301
-  force = true
