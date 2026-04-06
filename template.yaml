@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: AWS What's New Korean - RSS collection and translation pipeline
+Description: AWS What's New Korean - RSS collection, translation pipeline, and web frontend
 
 Parameters:
   Environment:
@@ -13,6 +13,13 @@ Parameters:
   BedrockReviewModel:
     Type: String
     Default: apac.amazon.nova-lite-v1:0
+  GitHubRepository:
+    Type: String
+    Description: GitHub repository URL (https://github.com/owner/repo)
+  GitHubAccessToken:
+    Type: String
+    NoEcho: true
+    Description: GitHub personal access token for Amplify
 
 Globals:
   Function:
@@ -28,7 +35,7 @@ Globals:
         BEDROCK_REVIEW_MODEL: !Ref BedrockReviewModel
 
 Resources:
-  # DynamoDB
+  # ── DynamoDB ──
   ArticlesTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -61,7 +68,7 @@ Resources:
         AttributeName: ttl
         Enabled: true
 
-  # SQS
+  # ── SQS ──
   TranslationQueue:
     Type: AWS::SQS::Queue
     Properties:
@@ -78,7 +85,7 @@ Resources:
       QueueName: !Sub aws-whats-new-translation-dlq-${Environment}
       MessageRetentionPeriod: 604800
 
-  # Lambda: RSS Collector (EventBridge trigger)
+  # ── Lambda: RSS Collector ──
   RssCollectorFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -97,7 +104,7 @@ Resources:
             Schedule: rate(15 minutes)
             Enabled: true
 
-  # Lambda: Translator (SQS trigger)
+  # ── Lambda: Translator ──
   TranslatorFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -123,6 +130,69 @@ Resources:
             Queue: !GetAtt TranslationQueue.Arn
             BatchSize: 1
 
+  # ── Amplify Hosting ──
+  AmplifyApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: !Sub aws-whats-new-${Environment}
+      Repository: !Ref GitHubRepository
+      AccessToken: !Ref GitHubAccessToken
+      BuildSpec: |
+        version: 1
+        frontend:
+          phases:
+            preBuild:
+              commands:
+                - npm ci
+            build:
+              commands:
+                - npm run build
+          artifacts:
+            baseDirectory: dist
+            files:
+              - '**/*'
+          cache:
+            paths:
+              - node_modules/**/*
+      EnvironmentVariables:
+        - Name: TABLE_NAME
+          Value: !Ref ArticlesTable
+        - Name: ENVIRONMENT
+          Value: !Ref Environment
+      IAMServiceRole: !GetAtt AmplifyRole.Arn
+
+  AmplifyBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt AmplifyApp.AppId
+      BranchName: main
+      EnableAutoBuild: true
+
+  # ── Amplify IAM Role ──
+  AmplifyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub aws-whats-new-amplify-${Environment}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: amplify.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: DynamoDBRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                  - dynamodb:GetItem
+                Resource:
+                  - !GetAtt ArticlesTable.Arn
+                  - !Sub ${ArticlesTable.Arn}/index/*
+
 Outputs:
   TableName:
     Value: !Ref ArticlesTable
@@ -130,3 +200,7 @@ Outputs:
     Value: !Ref TranslationQueue
   DLQUrl:
     Value: !Ref TranslationDLQ
+  AmplifyAppUrl:
+    Value: !Sub https://main.${AmplifyApp.DefaultDomain}
+  AmplifyAppId:
+    Value: !GetAtt AmplifyApp.AppId
