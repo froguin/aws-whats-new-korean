@@ -1,0 +1,132 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AWS What's New Korean - RSS collection and translation pipeline
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, prod]
+  BedrockTranslateModel:
+    Type: String
+    Default: apac.amazon.nova-micro-v1:0
+  BedrockReviewModel:
+    Type: String
+    Default: apac.amazon.nova-lite-v1:0
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 300
+    MemorySize: 256
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref ArticlesTable
+        QUEUE_URL: !Ref TranslationQueue
+        ENVIRONMENT: !Ref Environment
+        BEDROCK_TRANSLATE_MODEL: !Ref BedrockTranslateModel
+        BEDROCK_REVIEW_MODEL: !Ref BedrockReviewModel
+
+Resources:
+  # DynamoDB
+  ArticlesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub aws-whats-new-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: gsi1pk
+          AttributeType: S
+        - AttributeName: gsi1sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: gsi1
+          KeySchema:
+            - AttributeName: gsi1pk
+              KeyType: HASH
+            - AttributeName: gsi1sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # SQS
+  TranslationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub aws-whats-new-translation-${Environment}
+      VisibilityTimeout: 600
+      MessageRetentionPeriod: 86400
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TranslationDLQ.Arn
+        maxReceiveCount: 3
+
+  TranslationDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub aws-whats-new-translation-dlq-${Environment}
+      MessageRetentionPeriod: 604800
+
+  # Lambda: RSS Collector (EventBridge trigger)
+  RssCollectorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub aws-whats-new-rss-collector-${Environment}
+      Handler: index.handler
+      CodeUri: functions/rss-collector/
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ArticlesTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt TranslationQueue.QueueName
+      Events:
+        Schedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(15 minutes)
+            Enabled: true
+
+  # Lambda: Translator (SQS trigger)
+  TranslatorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub aws-whats-new-translator-${Environment}
+      Handler: index.handler
+      CodeUri: functions/translator/
+      Timeout: 600
+      MemorySize: 512
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ArticlesTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource:
+                - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/apac.amazon.*
+                - arn:aws:bedrock:*::foundation-model/amazon.nova-*
+      Events:
+        SQSTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt TranslationQueue.Arn
+            BatchSize: 1
+
+Outputs:
+  TableName:
+    Value: !Ref ArticlesTable
+  QueueUrl:
+    Value: !Ref TranslationQueue
+  DLQUrl:
+    Value: !Ref TranslationDLQ
