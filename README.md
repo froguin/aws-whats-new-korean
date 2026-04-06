@@ -68,10 +68,12 @@ npx ampx sandbox         # 백엔드 샌드박스 (DynamoDB, SQS, Lambda)
 
 ```
 ├── amplify/
-│   └── backend.ts             # Amplify Gen 2 백엔드 (CDK)
-├── functions/
-│   ├── rss-collector/         # RSS 수집 Lambda
-│   └── translator/            # 번역+검수 Lambda
+│   ├── backend.ts             # Amplify Gen 2 백엔드 (CDK)
+│   ├── tsconfig.json
+│   └── functions/
+│       ├── rss-collector/     # RSS 수집 (15분 크론)
+│       ├── translator/        # 번역+검수 (SQS trigger)
+│       └── api/               # API (Function URL)
 ├── scripts/
 │   └── migrate-from-netlify.js  # 데이터 마이그레이션 (일회성)
 ├── src/
