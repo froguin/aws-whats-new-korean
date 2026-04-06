@@ -40,8 +40,8 @@ const queue = new sqs.Queue(stack, 'TranslationQueue', {
 const fnEnv = {
   TABLE_NAME: table.tableName,
   QUEUE_URL: queue.queueUrl,
-  BEDROCK_TRANSLATE_MODEL: 'apac.amazon.nova-micro-v1:0',
-  BEDROCK_REVIEW_MODEL: 'apac.amazon.nova-lite-v1:0',
+  BEDROCK_TRANSLATE_MODEL: 'apac.amazon.nova-lite-v1:0',
+  BEDROCK_REVIEW_MODEL: 'apac.amazon.nova-micro-v1:0',
 };
 
 // ── Lambda: RSS Collector ──
