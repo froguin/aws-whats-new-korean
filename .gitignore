@@ -4,5 +4,5 @@ dist/
 .env
 .env.local
 .dev.vars
-samconfig.toml
-.aws-sam/
+.amplify/
+amplifyconfiguration*

@@ -1,9 +1,9 @@
 import { defineConfig } from 'astro/config';
 import tailwind from '@astrojs/tailwind';
-import aws from 'astro-provider-aws';
+import node from '@astrojs/node';
 
 export default defineConfig({
   output: 'server',
-  adapter: aws(),
+  adapter: node({ mode: 'standalone' }),
   integrations: [tailwind()],
 });

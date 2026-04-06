@@ -39,39 +39,36 @@ Amplify (Astro SSR)
 
 ## 사전 요구사항
 
-- AWS CLI + SAM CLI 설치
+- AWS CLI 설치
 - Node.js 20+
 - Bedrock 모델 접근 활성화 (Nova Micro, Nova Lite)
 
 ## 배포
 
 ```bash
-# 1. 백엔드 (DynamoDB, SQS, Lambda)
-sam build
-sam deploy --guided --region ap-northeast-2
+# 1. Amplify Console에서 GitHub 레포 연결
+#    → git push 시 프론트엔드 + 백엔드 자동 배포
 
 # 2. (선택) Netlify 기존 데이터 마이그레이션 — 일회성
-TABLE_NAME=aws-whats-new-prod \
+TABLE_NAME=<출력된 테이블명> \
 NETLIFY_SITE_ID=your-site-id \
 NETLIFY_ACCESS_TOKEN=your-token \
   node scripts/migrate-from-netlify.js
-
-# 3. 프론트엔드 (Amplify)
-# Amplify Console에서 GitHub 레포 연결 → 자동 배포
 ```
 
 ## 로컬 개발
 
 ```bash
 npm install
-npm run dev          # Astro 개발 서버
-sam local invoke     # Lambda 로컬 테스트
+npm run dev              # Astro 개발 서버
+npx ampx sandbox         # 백엔드 샌드박스 (DynamoDB, SQS, Lambda)
 ```
 
 ## 프로젝트 구조
 
 ```
-├── template.yaml              # SAM 템플릿
+├── amplify/
+│   └── backend.ts             # Amplify Gen 2 백엔드 (CDK)
 ├── functions/
 │   ├── rss-collector/         # RSS 수집 Lambda
 │   └── translator/            # 번역+검수 Lambda
