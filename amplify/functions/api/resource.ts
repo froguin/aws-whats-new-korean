@@ -4,5 +4,5 @@ export const api = defineFunction({
   name: 'api',
   timeoutSeconds: 30,
   memoryMB: 256,
-  runtime: 20,
+  runtime: 22,
 });
