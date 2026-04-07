@@ -18,7 +18,7 @@ frontend:
             export VITE_API_URL="$API_URL"
             echo "VITE_API_URL=$API_URL"
           fi
-        - npm run build
+          npm run build
     postBuild:
       commands:
         - mkdir -p .amplify-hosting/static
