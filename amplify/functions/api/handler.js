@@ -4,7 +4,26 @@ import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 const TABLE = process.env.TABLE_NAME;
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
-const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' };
+const DEFAULT_HEADERS = { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300', Vary: 'Origin' };
+
+const ALLOWED_ORIGIN_PATTERNS = [
+  /^https:\/\/[a-z0-9-]+\.amplifyapp\.com$/,
+  /^https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.amplifyapp\.com$/,
+  /^http:\/\/localhost(?::\d{1,5})?$/,
+  /^http:\/\/127\.0\.0\.1(?::\d{1,5})?$/,
+];
+
+function resolveCorsHeaders(origin = '') {
+  if (!origin) return DEFAULT_HEADERS;
+  const isAllowed = ALLOWED_ORIGIN_PATTERNS.some((pattern) => pattern.test(origin));
+  if (!isAllowed) return DEFAULT_HEADERS;
+  return {
+    ...DEFAULT_HEADERS,
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
 
 const ipCounts = new Map();
 function isRateLimited(ip) {
@@ -15,6 +34,13 @@ function isRateLimited(ip) {
 }
 
 export const handler = async (event) => {
+  const origin = event.headers?.origin || event.headers?.Origin || '';
+  const headers = resolveCorsHeaders(origin);
+
+  if ((event.requestContext?.http?.method || '').toUpperCase() === 'OPTIONS') {
+    return { statusCode: 204, headers, body: '' };
+  }
+
   const ip = event.requestContext?.http?.sourceIp || 'unknown';
   if (isRateLimited(ip)) return { statusCode: 429, headers, body: '{"error":"Too many requests"}' };
 
