@@ -1,11 +1,11 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
-import type { SQSHandler } from 'aws-lambda';
 
-const TABLE = process.env.TABLE_NAME!;
-const TRANSLATE_MODEL = process.env.BEDROCK_TRANSLATE_MODEL!;
-const REVIEW_MODEL = process.env.BEDROCK_REVIEW_MODEL!;
+
+const TABLE = process.env.TABLE_NAME;
+const TRANSLATE_MODEL = process.env.BEDROCK_TRANSLATE_MODEL;
+const REVIEW_MODEL = process.env.BEDROCK_REVIEW_MODEL;
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const bedrock = new BedrockRuntimeClient({});
@@ -30,7 +30,7 @@ const REVIEW_PROMPT = `You review Korean cloud news cards. Find errors:
 5. Title too vague or mirroring English
 OUTPUT JSON with corrected fields only. No code fences. If correct: {"pass":true}`;
 
-async function invokeModel(modelId: string, system: string, userMsg: string) {
+async function invokeModel(modelId, system, userMsg) {
   const resp = await bedrock.send(new InvokeModelCommand({
     modelId,
     contentType: 'application/json',
@@ -48,7 +48,7 @@ async function invokeModel(modelId: string, system: string, userMsg: string) {
 }
 
 function assessQuality(record: any) {
-  const issues: string[] = [];
+  const issues[] = [];
   if (!record.title || record.title.length < 5) issues.push('title_too_short');
   if (!record.summary || record.summary.length < 20) issues.push('summary_too_short');
   if (/[一-龥ぁ-ヿ]/.test((record.title || '') + (record.summary || ''))) issues.push('cjk_contamination');
@@ -56,7 +56,7 @@ function assessQuality(record: any) {
   return issues;
 }
 
-export const handler: SQSHandler = async (event) => {
+export const handler= async (event) => {
   for (const sqsRecord of event.Records) {
     const article = JSON.parse(sqsRecord.body);
     const { guid, title, description, pubDate } = article;
@@ -87,9 +87,9 @@ export const handler: SQSHandler = async (event) => {
       // Save: UpdateItem on existing row
       await ddb.send(new UpdateCommand({
         TableName: TABLE,
-        Key: { pk: guid, sk: 'ARTICLE' },
+        Key,
         UpdateExpression: 'SET title_ko = :tk, summary_ko = :sk, target = :tg, features = :ft, regions = :rg, #st = :st, gsi1pk = :gsi1pk, translatedAt = :ta, translateModel = :tm, reviewModel = :rm',
-        ExpressionAttributeNames: { '#st': 'status' },
+        ExpressionAttributeNames,
         ExpressionAttributeValues: {
           ':tk': record.title || '',
           ':sk': record.summary || '',

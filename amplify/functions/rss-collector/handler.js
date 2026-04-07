@@ -3,27 +3,27 @@ import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dyn
 import { SQSClient, SendMessageBatchCommand } from '@aws-sdk/client-sqs';
 
 const RSS_URL = 'https://aws.amazon.com/about-aws/whats-new/recent/feed/';
-const TABLE = process.env.TABLE_NAME!;
-const QUEUE_URL = process.env.QUEUE_URL!;
+const TABLE = process.env.TABLE_NAME;
+const QUEUE_URL = process.env.QUEUE_URL;
 const TTL_DAYS = 30;
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const sqs = new SQSClient({});
 
-function parseRSS(xml: string) {
-  const items: { title: string; guid: string; description: string; pubDate: string }[] = [];
-  const regex = /<item>[\s\S]*?<\/item>/g;
+function parseRSS(xml) {
+  const items[] = [];
+  const regex = /[\s\S]*?/g;
   let match;
   while ((match = regex.exec(xml)) !== null) {
     const block = match[0];
-    const get = (t: string) => {
-      const m = block.match(new RegExp(`<${t}[^>]*>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</${t}>`));
+    const get = (t) => {
+      const m = block.match(new RegExp(`]*>(?:)?`));
       if (!m) return '';
-      return m[1].replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '').trim();
+      return m[1].replace(//g, '').trim();
     };
-    const title = get('title').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    const title = get('title').replace(/]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '');
     const guid = get('guid') || get('link');
-    const description = get('description').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
+    const description = get('description').replace(/]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
     const pubDate = get('pubDate');
     if (title && guid) {
       items.push({ title, guid, description, pubDate: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString() });
@@ -33,18 +33,18 @@ function parseRSS(xml: string) {
 }
 
 export const handler = async () => {
-  const resp = await fetch(RSS_URL, { headers: { 'User-Agent': 'AWSWhatsNewKR/1.0' } });
+  const resp = await fetch(RSS_URL, { headers });
   if (!resp.ok) throw new Error(`RSS fetch failed: ${resp.status}`);
   const xml = await resp.text();
   const items = parseRSS(xml).slice(0, 50);
 
   let newCount = 0;
-  const sqsMessages: { Id: string; MessageBody: string }[] = [];
+  const sqsMessages[] = [];
   const ttl = Math.floor(Date.now() / 1000) + TTL_DAYS * 86400;
 
   for (const item of items) {
     const existing = await ddb.send(new GetCommand({
-      TableName: TABLE, Key: { pk: item.guid, sk: 'ARTICLE' },
+      TableName: TABLE, Key,
     }));
     if (existing.Item) continue;
 
