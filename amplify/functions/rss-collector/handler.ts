@@ -1,17 +1,17 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageBatchCommand } from '@aws-sdk/client-sqs';
 
 const RSS_URL = 'https://aws.amazon.com/about-aws/whats-new/recent/feed/';
-const TABLE = process.env.TABLE_NAME;
-const QUEUE_URL = process.env.QUEUE_URL;
+const TABLE = process.env.TABLE_NAME!;
+const QUEUE_URL = process.env.QUEUE_URL!;
 const TTL_DAYS = 30;
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const sqs = new SQSClient({});
 
 function parseRSS(xml: string) {
-  const items: { title: string; link: string; description: string; pubDate: string }[] = [];
+  const items: { title: string; guid: string; description: string; pubDate: string }[] = [];
   const regex = /<item>[\s\S]*?<\/item>/g;
   let match;
   while ((match = regex.exec(xml)) !== null) {
@@ -22,11 +22,11 @@ function parseRSS(xml: string) {
       return m[1].replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '').trim();
     };
     const title = get('title').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-    const link = get('link') || get('guid');
+    const guid = get('guid') || get('link');
     const description = get('description').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
     const pubDate = get('pubDate');
-    if (title && link) {
-      items.push({ title, link, description, pubDate: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString() });
+    if (title && guid) {
+      items.push({ title, guid, description, pubDate: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString() });
     }
   }
   return items;
@@ -43,27 +43,30 @@ export const handler = async () => {
   const ttl = Math.floor(Date.now() / 1000) + TTL_DAYS * 86400;
 
   for (const item of items) {
-    const articleId = Buffer.from(item.link).toString('base64url');
-    const existing = await ddb.send(new QueryCommand({
-      TableName: TABLE, KeyConditionExpression: 'pk = :pk AND sk = :sk',
-      ExpressionAttributeValues: { ':pk': `ARTICLE#${articleId}`, ':sk': 'EN' }, Limit: 1,
+    const existing = await ddb.send(new GetCommand({
+      TableName: TABLE, Key: { pk: item.guid, sk: 'ARTICLE' },
     }));
-    if (existing.Items?.length > 0) continue;
+    if (existing.Item) continue;
 
     await ddb.send(new PutCommand({
       TableName: TABLE,
       Item: {
-        pk: `ARTICLE#${articleId}`, sk: 'EN',
-        gsi1pk: 'LANG#en', gsi1sk: item.pubDate,
-        articleId, title: item.title, description: item.description,
-        url: item.link, pubDate: item.pubDate, lang: 'en', ttl,
+        pk: item.guid,
+        sk: 'ARTICLE',
+        gsi1pk: 'STATUS#pending',
+        gsi1sk: item.pubDate,
+        title_en: item.title,
+        description: item.description,
+        url: item.guid,
+        pubDate: item.pubDate,
+        ttl,
         createdAt: new Date().toISOString(),
       },
     }));
 
     sqsMessages.push({
       Id: String(newCount),
-      MessageBody: JSON.stringify({ articleId, title: item.title, description: item.description, url: item.link, pubDate: item.pubDate }),
+      MessageBody: JSON.stringify({ guid: item.guid, title: item.title, description: item.description, pubDate: item.pubDate }),
     });
     newCount++;
   }
