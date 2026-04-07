@@ -17,17 +17,25 @@ frontend:
       commands:
         - |
           if [ -f amplify_outputs.json ]; then
+            # 1. JSON에서 API_URL 추출
             API_URL=$(node -p "JSON.parse(require('fs').readFileSync('amplify_outputs.json','utf8')).custom?.apiUrl || ''")
+            
             if [ -n "$API_URL" ]; then
+              # 2. API_URL이 존재하면 치환 실행
               if sed "s|PUBLIC_API_URL_PLACEHOLDER|${API_URL}|g" dist/index.html > dist/index.html.tmp && mv dist/index.html.tmp dist/index.html; then
                 echo "Injected API URL: $API_URL"
-            API_URL=$(node -p "JSON.parse(require('fs').readFileSync('amplify_outputs.json','utf8')).custom?.apiUrl || ''")
-            if [ -z "$API_URL" ]; then
+              else
+                echo "ERROR: Failed to inject API URL into dist/index.html"
+                exit 1
+              fi
+            else
+              # 3. API_URL이 빈 값일 경우 에러 처리
               echo "ERROR: apiUrl not found in amplify_outputs.json"
               exit 1
             fi
           else
-            echo "ERROR: amplify_outputs.json not found - cannot proceed without API URL"
+            # 4. 파일 자체가 없을 경우 에러 처리
+            echo "ERROR: amplify_outputs.json not found"
             exit 1
           fi
   artifacts:
