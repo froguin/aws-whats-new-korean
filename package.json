@@ -15,11 +15,16 @@
     "@astrojs/tailwind": "^5.1.2",
     "@aws-amplify/backend": "^1.0.0",
     "@aws-amplify/backend-cli": "^1.0.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1025.0",
+    "@aws-sdk/client-dynamodb": "^3.1025.0",
+    "@aws-sdk/client-sqs": "^3.1025.0",
+    "@aws-sdk/lib-dynamodb": "^3.1025.0",
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^25.5.2",
+    "autoprefixer": "^10.4.20",
     "aws-cdk-lib": "^2.170.0",
     "constructs": "^10.4.0",
-    "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.15",
-    "@types/aws-lambda": "^8.10.145"
+    "tailwindcss": "^3.4.15"
   }
 }

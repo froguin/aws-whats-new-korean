@@ -43,14 +43,14 @@ const queue = new sqs.Queue(stack, 'TranslationQueue', {
 });
 
 // ── Grant access: RSS Collector → DynamoDB + SQS ──
-const rssLambda = backend.rssCollector.resources.lambda;
+const rssLambda = backend.rssCollector.resources.lambda as lambda.Function;
 table.grantReadWriteData(rssLambda);
 queue.grantSendMessages(rssLambda);
 rssLambda.addEnvironment('TABLE_NAME', table.tableName);
 rssLambda.addEnvironment('QUEUE_URL', queue.queueUrl);
 
 // ── Grant access: Translator → DynamoDB + Bedrock ──
-const translatorLambda = backend.translator.resources.lambda;
+const translatorLambda = backend.translator.resources.lambda as lambda.Function;
 table.grantReadWriteData(translatorLambda);
 translatorLambda.addEnvironment('TABLE_NAME', table.tableName);
 translatorLambda.addEnvironment('BEDROCK_TRANSLATE_MODEL', 'apac.amazon.nova-lite-v1:0');
@@ -67,7 +67,7 @@ translatorLambda.addToRolePolicy(new iam.PolicyStatement({
 translatorLambda.addEventSource(new lambdaEventSources.SqsEventSource(queue, { batchSize: 1 }));
 
 // ── Grant access: API → DynamoDB (read only) ──
-const apiLambda = backend.api.resources.lambda;
+const apiLambda = backend.api.resources.lambda as lambda.Function;
 table.grantReadData(apiLambda);
 apiLambda.addEnvironment('TABLE_NAME', table.tableName);
 

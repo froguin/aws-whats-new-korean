@@ -1,6 +1,7 @@
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
-const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
+import type { SQSEvent } from 'aws-lambda';
 
 const TABLE = process.env.TABLE_NAME;
 const TRANSLATE_MODEL = process.env.BEDROCK_TRANSLATE_MODEL;
@@ -43,7 +44,7 @@ const FEW_SHOT = [
 
 // ── Bedrock helpers ──
 
-async function invokeModel(modelId, messages) {
+async function invokeModel(modelId: string, messages: { role: string; content: { text: string }[] | string }[]) {
   const resp = await bedrock.send(new InvokeModelCommand({
     modelId,
     contentType: 'application/json',
@@ -57,8 +58,8 @@ async function invokeModel(modelId, messages) {
 
 // ── Quality gate ──
 
-function assessQuality(record) {
-  const issues = [];
+function assessQuality(record: Record<string, string>) {
+  const issues: string[] = [];
   if (!record.title || record.title.length < 5) issues.push('title_too_short');
   if (!record.summary || record.summary.length < 20) issues.push('summary_too_short');
   if (/[一-龥ぁ-ヿ]/.test(record.title + record.summary)) issues.push('cjk_contamination');
@@ -69,58 +70,51 @@ function assessQuality(record) {
 
 // ── Pipeline ──
 
-async function translate(article) {
+async function translate(article: { title: string; description: string }) {
   const userMsg = `Title: ${article.title}\nDescription: ${article.description}`;
   const messages = [...FEW_SHOT, { role: 'user', content: [{ text: userMsg }] }];
-  // Fix few-shot format for Bedrock
   const formatted = messages.map(m => ({
     role: m.role,
     content: Array.isArray(m.content) ? m.content : [{ text: m.content }],
   }));
-  return invokeModel(TRANSLATE_MODEL, formatted);
+  return invokeModel(TRANSLATE_MODEL!, formatted);
 }
 
-async function review(article, record) {
+async function review(article: { title: string; description: string }, record: Record<string, string>) {
   const userMsg = `Original Title: ${article.title}\nOriginal Description: ${article.description}\n\nTranslated:\n${JSON.stringify(record)}`;
   const messages = [{ role: 'user', content: [{ text: userMsg }] }];
   try {
-    const result = await invokeModel(REVIEW_MODEL, messages);
+    const result = await invokeModel(REVIEW_MODEL!, messages);
     if (result.pass) return record;
-    // Apply corrections
     return { ...record, ...result, pass: undefined };
   } catch {
-    return record; // Review failed, keep original
+    return record;
   }
 }
 
-exports.handler = async (event) => {
+export const handler = async (event: SQSEvent) => {
   for (const sqsRecord of event.Records) {
     const article = JSON.parse(sqsRecord.body);
     const { articleId } = article;
     const ttl = Math.floor(Date.now() / 1000) + TTL_DAYS * 86400;
 
     try {
-      // Step 1: Translate
       let record = await translate(article);
 
-      // Step 2: Quality gate
       const issues = assessQuality(record);
       if (issues.length > 0) {
         console.warn(`Quality issues for ${articleId}: ${issues.join(', ')}. Retrying...`);
-        record = await translate(article); // Retry once
+        record = await translate(article);
       }
 
-      // Step 3: AI Review
       record = await review(article, record);
 
-      // Step 4: Final quality check
       const finalIssues = assessQuality(record);
       if (finalIssues.includes('cjk_contamination')) {
         record.summary = record.summary.replace(/[一-龥ぁ-ヿ]/g, '');
         record.title = record.title.replace(/[一-龥ぁ-ヿ]/g, '');
       }
 
-      // Save Korean translation
       await ddb.send(new PutCommand({
         TableName: TABLE,
         Item: {
@@ -139,9 +133,9 @@ exports.handler = async (event) => {
       }));
 
       console.log(`Translated ${articleId}: ${record.title}`);
-    } catch (err) {
-      console.error(`Failed ${articleId}:`, err.message);
-      throw err; // Let SQS retry
+    } catch (err: unknown) {
+      console.error(`Failed ${articleId}:`, (err as Error).message);
+      throw err;
     }
   }
 };

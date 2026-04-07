@@ -1,6 +1,6 @@
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
-const { SQSClient, SendMessageBatchCommand } = require('@aws-sdk/client-sqs');
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { SQSClient, SendMessageBatchCommand } from '@aws-sdk/client-sqs';
 
 const RSS_URL = 'https://aws.amazon.com/about-aws/whats-new/recent/feed/';
 const TABLE = process.env.TABLE_NAME;
@@ -10,13 +10,13 @@ const TTL_DAYS = 30;
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const sqs = new SQSClient({});
 
-function parseRSS(xml) {
-  const items = [];
+function parseRSS(xml: string) {
+  const items: { title: string; link: string; description: string; pubDate: string }[] = [];
   const regex = /<item>[\s\S]*?<\/item>/g;
   let match;
   while ((match = regex.exec(xml)) !== null) {
     const block = match[0];
-    const get = (t) => {
+    const get = (t: string) => {
       const m = block.match(new RegExp(`<${t}[^>]*>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</${t}>`));
       if (!m) return '';
       return m[1].replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '').trim();
@@ -32,14 +32,14 @@ function parseRSS(xml) {
   return items;
 }
 
-exports.handler = async () => {
+export const handler = async () => {
   const resp = await fetch(RSS_URL, { headers: { 'User-Agent': 'AWSWhatsNewKR/1.0' } });
   if (!resp.ok) throw new Error(`RSS fetch failed: ${resp.status}`);
   const xml = await resp.text();
   const items = parseRSS(xml).slice(0, 50);
 
   let newCount = 0;
-  const sqsMessages = [];
+  const sqsMessages: { Id: string; MessageBody: string }[] = [];
   const ttl = Math.floor(Date.now() / 1000) + TTL_DAYS * 86400;
 
   for (const item of items) {
