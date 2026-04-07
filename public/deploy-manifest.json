@@ -2,14 +2,14 @@
   "version": 1,
   "routes": [
     {
-      "path": "/<*>",
+      "path": "/*",
       "target": {
         "kind": "Static"
-      },
-      "fallback": {
-        "kind": "Static",
-        "uri": "/index.html"
       }
     }
-  ]
+  ],
+  "framework": {
+    "name": "astro",
+    "version": "5"
+  }
 }
