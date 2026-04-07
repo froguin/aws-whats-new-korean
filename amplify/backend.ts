@@ -70,6 +70,8 @@ translatorLambda.addEventSource(new lambdaEventSources.SqsEventSource(queue, { b
 const apiLambda = backend.api.resources.lambda as lambda.Function;
 table.grantReadData(apiLambda);
 apiLambda.addEnvironment('TABLE_NAME', table.tableName);
+apiLambda.addEnvironment('RESERVED_CONCURRENCY', '5');
+(apiLambda.node.defaultChild as lambda.CfnFunction).addPropertyOverride('ReservedConcurrentExecutions', 5);
 
 // Function URL for API
 const apiUrl = apiLambda.addFunctionUrl({

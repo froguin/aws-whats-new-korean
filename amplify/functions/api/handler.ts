@@ -8,10 +8,31 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const headers = {
   'Content-Type': 'application/json',
   'Cache-Control': 'public, max-age=300',
-  'Access-Control-Allow-Origin': '*',
 };
 
+// Simple in-memory rate limiting (per Lambda instance)
+const ipCounts = new Map<string, { count: number; reset: number }>();
+const RATE_LIMIT = 60; // requests per minute per IP
+const RATE_WINDOW = 60_000;
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = ipCounts.get(ip);
+  if (!entry || now > entry.reset) {
+    ipCounts.set(ip, { count: 1, reset: now + RATE_WINDOW });
+    return false;
+  }
+  entry.count++;
+  return entry.count > RATE_LIMIT;
+}
+
 export const handler = async (event: APIGatewayProxyEventV2) => {
+  const ip = event.requestContext?.http?.sourceIp || 'unknown';
+
+  if (isRateLimited(ip)) {
+    return { statusCode: 429, headers, body: JSON.stringify({ error: 'Too many requests' }) };
+  }
+
   const path = event.rawPath || '/';
   const params = event.queryStringParameters || {};
 
