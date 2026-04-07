@@ -43,7 +43,7 @@ export const handler = async () => {
   const ttl = Math.floor(Date.now() / 1000) + TTL_DAYS * 86400;
 
   for (const item of items) {
-    const articleId = Buffer.from(item.link).toString('base64url').slice(0, 64);
+    const articleId = Buffer.from(item.link).toString('base64url');
     const existing = await ddb.send(new QueryCommand({
       TableName: TABLE, KeyConditionExpression: 'pk = :pk AND sk = :sk',
       ExpressionAttributeValues: { ':pk': `ARTICLE#${articleId}`, ':sk': 'EN' }, Limit: 1,
