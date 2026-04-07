@@ -11,19 +11,19 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const sqs = new SQSClient({});
 
 function parseRSS(xml) {
-  const items[] = [];
-  const regex = /[\s\S]*?/g;
+  const items = [];
+  const regex = /<item>[\s\S]*?<\/item>/g;
   let match;
   while ((match = regex.exec(xml)) !== null) {
     const block = match[0];
     const get = (t) => {
-      const m = block.match(new RegExp(`]*>(?:)?`));
+      const m = block.match(new RegExp(`<${t}[^>]*>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</${t}>`));
       if (!m) return '';
-      return m[1].replace(//g, '').trim();
+      return m[1].replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '').trim();
     };
-    const title = get('title').replace(/]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '');
+    const title = get('title').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
     const guid = get('guid') || get('link');
-    const description = get('description').replace(/]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
+    const description = get('description').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
     const pubDate = get('pubDate');
     if (title && guid) {
       items.push({ title, guid, description, pubDate: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString() });
@@ -33,33 +33,26 @@ function parseRSS(xml) {
 }
 
 export const handler = async () => {
-  const resp = await fetch(RSS_URL, { headers });
+  const resp = await fetch(RSS_URL, { headers: { 'User-Agent': 'AWSWhatsNewKR/1.0' } });
   if (!resp.ok) throw new Error(`RSS fetch failed: ${resp.status}`);
   const xml = await resp.text();
   const items = parseRSS(xml).slice(0, 50);
 
   let newCount = 0;
-  const sqsMessages[] = [];
+  const sqsMessages = [];
   const ttl = Math.floor(Date.now() / 1000) + TTL_DAYS * 86400;
 
   for (const item of items) {
-    const existing = await ddb.send(new GetCommand({
-      TableName: TABLE, Key,
-    }));
+    const existing = await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: item.guid, sk: 'ARTICLE' } }));
     if (existing.Item) continue;
 
     await ddb.send(new PutCommand({
       TableName: TABLE,
       Item: {
-        pk: item.guid,
-        sk: 'ARTICLE',
-        gsi1pk: 'STATUS#pending',
-        gsi1sk: item.pubDate,
-        title_en: item.title,
-        description: item.description,
-        url: item.guid,
-        pubDate: item.pubDate,
-        ttl,
+        pk: item.guid, sk: 'ARTICLE',
+        gsi1pk: 'STATUS#pending', gsi1sk: item.pubDate,
+        title_en: item.title, description: item.description,
+        url: item.guid, pubDate: item.pubDate, ttl,
         createdAt: new Date().toISOString(),
       },
     }));

@@ -1,13 +1,11 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 
-
 const TABLE = process.env.TABLE_NAME;
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
 const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' };
 
-// Simple rate limiting
 const ipCounts = new Map();
 function isRateLimited(ip) {
   const now = Date.now();
@@ -25,11 +23,11 @@ export const handler = async (event) => {
 
   if (path === '/articles') {
     const limit = Math.min(parseInt(params.limit || '50'), 200);
-    const status = params.status || 'translated'; // translated | pending | all
+    const status = params.status || 'translated';
     const result = await ddb.send(new QueryCommand({
       TableName: TABLE, IndexName: 'gsi1',
       KeyConditionExpression: 'gsi1pk = :pk',
-      ExpressionAttributeValues` },
+      ExpressionAttributeValues: { ':pk': `STATUS#${status}` },
       ScanIndexForward: false, Limit: limit,
     }));
     const items = (result.Items || []).map(i => ({
@@ -43,8 +41,8 @@ export const handler = async (event) => {
 
   if (path === '/stats') {
     const [translated, pending] = await Promise.all([
-      ddb.send(new QueryCommand({ TableName: TABLE, IndexName: 'gsi1', KeyConditionExpression: 'gsi1pk = :pk', ExpressionAttributeValues, Select: 'COUNT' })),
-      ddb.send(new QueryCommand({ TableName: TABLE, IndexName: 'gsi1', KeyConditionExpression: 'gsi1pk = :pk', ExpressionAttributeValues, Select: 'COUNT' })),
+      ddb.send(new QueryCommand({ TableName: TABLE, IndexName: 'gsi1', KeyConditionExpression: 'gsi1pk = :pk', ExpressionAttributeValues: { ':pk': 'STATUS#translated' }, Select: 'COUNT' })),
+      ddb.send(new QueryCommand({ TableName: TABLE, IndexName: 'gsi1', KeyConditionExpression: 'gsi1pk = :pk', ExpressionAttributeValues: { ':pk': 'STATUS#pending' }, Select: 'COUNT' })),
     ]);
     return { statusCode: 200, headers, body: JSON.stringify({ translated: translated.Count || 0, pending: pending.Count || 0, total: (translated.Count || 0) + (pending.Count || 0) }) };
   }

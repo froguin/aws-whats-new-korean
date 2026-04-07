@@ -2,7 +2,6 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 
-
 const TABLE = process.env.TABLE_NAME;
 const TRANSLATE_MODEL = process.env.BEDROCK_TRANSLATE_MODEL;
 const REVIEW_MODEL = process.env.BEDROCK_REVIEW_MODEL;
@@ -32,12 +31,9 @@ OUTPUT JSON with corrected fields only. No code fences. If correct: {"pass":true
 
 async function invokeModel(modelId, system, userMsg) {
   const resp = await bedrock.send(new InvokeModelCommand({
-    modelId,
-    contentType: 'application/json',
-    accept: 'application/json',
+    modelId, contentType: 'application/json', accept: 'application/json',
     body: JSON.stringify({
-      schemaVersion: 'messages-v1',
-      system: [{ text: system }],
+      schemaVersion: 'messages-v1', system: [{ text: system }],
       messages: [{ role: 'user', content: [{ text: userMsg }] }],
     }),
   }));
@@ -47,8 +43,8 @@ async function invokeModel(modelId, system, userMsg) {
   return JSON.parse(text);
 }
 
-function assessQuality(record: any) {
-  const issues[] = [];
+function assessQuality(record) {
+  const issues = [];
   if (!record.title || record.title.length < 5) issues.push('title_too_short');
   if (!record.summary || record.summary.length < 20) issues.push('summary_too_short');
   if (/[一-龥ぁ-ヿ]/.test((record.title || '') + (record.summary || ''))) issues.push('cjk_contamination');
@@ -56,56 +52,43 @@ function assessQuality(record: any) {
   return issues;
 }
 
-export const handler= async (event) => {
+export const handler = async (event) => {
   for (const sqsRecord of event.Records) {
     const article = JSON.parse(sqsRecord.body);
-    const { guid, title, description, pubDate } = article;
+    const { guid, title, description } = article;
 
     try {
-      // Step 1: Translate
       const userMsg = `Title: ${title}\nDescription: ${description}`;
       let record = await invokeModel(TRANSLATE_MODEL, SYSTEM_PROMPT, userMsg);
 
-      // Step 2: Quality gate — retry once if issues
       if (assessQuality(record).length > 0) {
         record = await invokeModel(TRANSLATE_MODEL, SYSTEM_PROMPT, userMsg);
       }
 
-      // Step 3: AI Review
       try {
         const reviewMsg = `Original Title: ${title}\nOriginal Description: ${description}\n\nTranslated:\n${JSON.stringify(record)}`;
         const review = await invokeModel(REVIEW_MODEL, REVIEW_PROMPT, reviewMsg);
         if (!review.pass) record = { ...record, ...review, pass: undefined };
       } catch { /* review failed, keep original */ }
 
-      // Step 4: Clean CJK contamination
       if (/[一-龥ぁ-ヿ]/.test((record.title || '') + (record.summary || ''))) {
         record.title = (record.title || '').replace(/[一-龥ぁ-ヿ]/g, '');
         record.summary = (record.summary || '').replace(/[一-龥ぁ-ヿ]/g, '');
       }
 
-      // Save: UpdateItem on existing row
       await ddb.send(new UpdateCommand({
-        TableName: TABLE,
-        Key,
-        UpdateExpression: 'SET title_ko = :tk, summary_ko = :sk, target = :tg, features = :ft, regions = :rg, #st = :st, gsi1pk = :gsi1pk, translatedAt = :ta, translateModel = :tm, reviewModel = :rm',
-        ExpressionAttributeNames,
+        TableName: TABLE, Key: { pk: guid, sk: 'ARTICLE' },
+        UpdateExpression: 'SET title_ko = :tk, summary_ko = :sk, target = :tg, features = :ft, regions = :rg, #st = :st, gsi1pk = :gsi1pk, translatedAt = :ta',
+        ExpressionAttributeNames: { '#st': 'status' },
         ExpressionAttributeValues: {
-          ':tk': record.title || '',
-          ':sk': record.summary || '',
-          ':tg': record.target || '',
-          ':ft': record.features || '',
-          ':rg': record.regions || '',
-          ':st': JSON.stringify(record.status || []),
-          ':gsi1pk': 'STATUS#translated',
-          ':ta': new Date().toISOString(),
-          ':tm': TRANSLATE_MODEL,
-          ':rm': REVIEW_MODEL,
+          ':tk': record.title || '', ':sk': record.summary || '',
+          ':tg': record.target || '', ':ft': record.features || '',
+          ':rg': record.regions || '', ':st': JSON.stringify(record.status || []),
+          ':gsi1pk': 'STATUS#translated', ':ta': new Date().toISOString(),
         },
       }));
-
       console.log(`Translated ${guid}: ${record.title}`);
-    } catch (err: any) {
+    } catch (err) {
       console.error(`Failed ${guid}:`, err.message);
       throw err;
     }
