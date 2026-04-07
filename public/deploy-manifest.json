@@ -2,14 +2,23 @@
   "version": 1,
   "routes": [
     {
-      "path": "/*",
+      "path": "/_astro/<*>",
       "target": {
         "kind": "Static"
       }
+    },
+    {
+      "path": "/favicon.svg",
+      "target": {
+        "kind": "Static"
+      }
+    },
+    {
+      "path": "/<*>",
+      "target": {
+        "kind": "Static",
+        "uri": "/index.html"
+      }
     }
-  ],
-  "framework": {
-    "name": "astro",
-    "version": "5"
-  }
+  ]
 }
