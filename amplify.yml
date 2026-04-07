@@ -13,6 +13,23 @@ frontend:
     build:
       commands:
         - npm run build
+    postBuild:
+      commands:
+        - |
+          if [ -f amplify_outputs.json ]; then
+            API_URL=$(node -p "JSON.parse(require('fs').readFileSync('amplify_outputs.json','utf8')).custom?.apiUrl || ''")
+            if [ -n "$API_URL" ]; then
+              if sed "s|PUBLIC_API_URL_PLACEHOLDER|${API_URL}|g" dist/index.html > dist/index.html.tmp && mv dist/index.html.tmp dist/index.html; then
+                echo "Injected API URL: $API_URL"
+            API_URL=$(node -p "JSON.parse(require('fs').readFileSync('amplify_outputs.json','utf8')).custom?.apiUrl || ''")
+            if [ -z "$API_URL" ]; then
+              echo "ERROR: apiUrl not found in amplify_outputs.json"
+              exit 1
+            fi
+          else
+            echo "ERROR: amplify_outputs.json not found - cannot proceed without API URL"
+            exit 1
+          fi
   artifacts:
     baseDirectory: dist
     files:

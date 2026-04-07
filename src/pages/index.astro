@@ -35,6 +35,10 @@ import Layout from '../layouts/Layout.astro';
   </div>
 
   <script is:inline>
+    window.__PUBLIC_API_URL__ = window.__PUBLIC_API_URL__ || 'PUBLIC_API_URL_PLACEHOLDER';
+  </script>
+
+  <script is:inline>
     const API_URL = window.__PUBLIC_API_URL__ || '';
 
     function statusClass(status) {
@@ -127,9 +131,6 @@ import Layout from '../layouts/Layout.astro';
     loadArticles();
   </script>
 
-  <script is:inline>
-    window.__PUBLIC_API_URL__ = 'PUBLIC_API_URL_PLACEHOLDER';
-  </script>
   <script async is:inline src="https://www.googletagmanager.com/gtag/js?id=G-6K10Z2P301"></script>
   <script is:inline>
     window.dataLayer = window.dataLayer || [];
