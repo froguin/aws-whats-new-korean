@@ -6,4 +6,5 @@ export const api = defineFunction({
   timeoutSeconds: 30,
   memoryMB: 256,
   runtime: 22,
+  bundling: { externalPackages: ['@aws-sdk/*', '@smithy/*'] },
 });

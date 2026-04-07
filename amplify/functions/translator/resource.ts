@@ -6,4 +6,5 @@ export const translator = defineFunction({
   timeoutSeconds: 600,
   memoryMB: 512,
   runtime: 22,
+  bundling: { externalPackages: ['@aws-sdk/*', '@smithy/*'] },
 });
