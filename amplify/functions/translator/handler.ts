@@ -52,7 +52,9 @@ async function invokeModel(modelId: string, messages: { role: string; content: {
     body: JSON.stringify({ schemaVersion: 'messages-v1', system: [{ text: SYSTEM_PROMPT }], messages }),
   }));
   const parsed = JSON.parse(new TextDecoder().decode(resp.body));
-  const text = parsed.output?.message?.content?.[0]?.text || '';
+  let text = parsed.output?.message?.content?.[0]?.text || '';
+  // Strip markdown code fences (```json ... ```)
+  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
   return JSON.parse(text);
 }
 

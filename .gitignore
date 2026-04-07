@@ -6,3 +6,6 @@ dist/
 .dev.vars
 .amplify/
 amplifyconfiguration*
+
+# Local Netlify folder
+.netlify
