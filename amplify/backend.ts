@@ -3,19 +3,16 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
+import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Duration, RemovalPolicy } from 'aws-cdk-lib';
-import { rssCollector } from './functions/rss-collector/resource';
-import { translator } from './functions/translator/resource';
-import { api } from './functions/api/resource';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 
-const backend = defineBackend({
-  rssCollector,
-  translator,
-  api,
-});
-
-// ── Custom resources stack ──
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const backend = defineBackend({});
 const stack = backend.createStack('WhatsNewPipeline');
 
 // ── DynamoDB ──
@@ -33,48 +30,67 @@ table.addGlobalSecondaryIndex({
 });
 
 // ── SQS ──
-const dlq = new sqs.Queue(stack, 'TranslationDLQ', {
-  retentionPeriod: Duration.days(7),
-});
+const dlq = new sqs.Queue(stack, 'TranslationDLQ', { retentionPeriod: Duration.days(7) });
 const queue = new sqs.Queue(stack, 'TranslationQueue', {
   visibilityTimeout: Duration.minutes(10),
   retentionPeriod: Duration.days(1),
   deadLetterQueue: { queue: dlq, maxReceiveCount: 3 },
 });
 
-// ── Grant access: RSS Collector → DynamoDB + SQS ──
-const rssLambda = backend.rssCollector.resources.lambda as lambda.Function;
-table.grantReadWriteData(rssLambda);
-queue.grantSendMessages(rssLambda);
-rssLambda.addEnvironment('TABLE_NAME', table.tableName);
-rssLambda.addEnvironment('QUEUE_URL', queue.queueUrl);
+const nodejsProps = {
+  runtime: lambda.Runtime.NODEJS_22_X,
+  architecture: lambda.Architecture.ARM_64,
+  bundling: { externalModules: ['@aws-sdk/*', '@smithy/*'] },
+};
 
-// ── Grant access: Translator → DynamoDB + Bedrock ──
-const translatorLambda = backend.translator.resources.lambda as lambda.Function;
-table.grantReadWriteData(translatorLambda);
-translatorLambda.addEnvironment('TABLE_NAME', table.tableName);
-translatorLambda.addEnvironment('BEDROCK_TRANSLATE_MODEL', 'apac.amazon.nova-lite-v1:0');
-translatorLambda.addEnvironment('BEDROCK_REVIEW_MODEL', 'apac.amazon.nova-micro-v1:0');
-translatorLambda.addToRolePolicy(new iam.PolicyStatement({
+// ── Lambda: RSS Collector ──
+const rssCollector = new NodejsFunction(stack, 'RssCollector', {
+  ...nodejsProps,
+  entry: path.join(__dirname, 'functions', 'rss-collector', 'handler.js'),
+  timeout: Duration.minutes(5),
+  memorySize: 256,
+  environment: { TABLE_NAME: table.tableName, QUEUE_URL: queue.queueUrl },
+});
+table.grantReadWriteData(rssCollector);
+queue.grantSendMessages(rssCollector);
+new events.Rule(stack, 'RssSchedule', {
+  schedule: events.Schedule.rate(Duration.minutes(15)),
+  targets: [new targets.LambdaFunction(rssCollector)],
+});
+
+// ── Lambda: Translator ──
+const translator = new NodejsFunction(stack, 'Translator', {
+  ...nodejsProps,
+  entry: path.join(__dirname, 'functions', 'translator', 'handler.js'),
+  timeout: Duration.minutes(10),
+  memorySize: 512,
+  environment: {
+    TABLE_NAME: table.tableName,
+    BEDROCK_TRANSLATE_MODEL: 'apac.amazon.nova-lite-v1:0',
+    BEDROCK_REVIEW_MODEL: 'apac.amazon.nova-micro-v1:0',
+  },
+});
+table.grantReadWriteData(translator);
+translator.addToRolePolicy(new iam.PolicyStatement({
   actions: ['bedrock:InvokeModel'],
   resources: [
     `arn:aws:bedrock:*:${stack.account}:inference-profile/apac.amazon.*`,
     'arn:aws:bedrock:*::foundation-model/amazon.nova-*',
   ],
 }));
+translator.addEventSource(new lambdaEventSources.SqsEventSource(queue, { batchSize: 1 }));
 
-// SQS trigger for translator
-translatorLambda.addEventSource(new lambdaEventSources.SqsEventSource(queue, { batchSize: 1 }));
-
-// ── Grant access: API → DynamoDB (read only) ──
-const apiLambda = backend.api.resources.lambda as lambda.Function;
-table.grantReadData(apiLambda);
-apiLambda.addEnvironment('TABLE_NAME', table.tableName);
-apiLambda.addEnvironment('RESERVED_CONCURRENCY', '5');
-(apiLambda.node.defaultChild as lambda.CfnFunction).addPropertyOverride('ReservedConcurrentExecutions', 5);
-
-// Function URL for API
-const apiUrl = apiLambda.addFunctionUrl({
+// ── Lambda: API ──
+const api = new NodejsFunction(stack, 'Api', {
+  ...nodejsProps,
+  entry: path.join(__dirname, 'functions', 'api', 'handler.js'),
+  timeout: Duration.seconds(30),
+  memorySize: 256,
+  environment: { TABLE_NAME: table.tableName },
+  reservedConcurrentExecutions: 5,
+});
+table.grantReadData(api);
+const apiUrl = api.addFunctionUrl({
   authType: lambda.FunctionUrlAuthType.NONE,
   cors: {
     allowedOrigins: ['https://d27cqsuosbietu.amplifyapp.com', 'http://localhost:*'],
