@@ -12,20 +12,18 @@ frontend:
         - npm install
     build:
       commands:
+        - |
+          if [ -f amplify_outputs.json ]; then
+            API_URL=$(node -p "JSON.parse(require('fs').readFileSync('amplify_outputs.json','utf8')).custom?.apiUrl || ''")
+            export VITE_API_URL="$API_URL"
+            echo "VITE_API_URL=$API_URL"
+          fi
         - npm run build
     postBuild:
       commands:
         - mkdir -p .amplify-hosting/static
         - cp -r dist/* .amplify-hosting/static/
-        - |
-          if [ -f amplify_outputs.json ]; then
-            API_URL=$(node -p "JSON.parse(require('fs').readFileSync('amplify_outputs.json','utf8')).custom?.apiUrl || ''")
-            if [ -n "$API_URL" ]; then
-              find .amplify-hosting/static -name '*.html' -exec sed -i "s|PUBLIC_API_URL_PLACEHOLDER|${API_URL}|g" {} +
-              echo "Injected API URL: $API_URL"
-            fi
-          fi
-        - printf '{"version":1,"routes":[{"path":"/*","target":{"kind":"Static"}}],"framework":{"name":"astro","version":"5.0.0"}}' > .amplify-hosting/deploy-manifest.json
+        - printf '{"version":1,"routes":[{"path":"/*","target":{"kind":"Static"}}],"framework":{"name":"vite","version":"6.0.0"}}' > .amplify-hosting/deploy-manifest.json
   artifacts:
     baseDirectory: .amplify-hosting
     files:
