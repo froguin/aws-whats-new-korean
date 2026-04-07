@@ -74,7 +74,11 @@ apiLambda.addEnvironment('TABLE_NAME', table.tableName);
 // Function URL for API
 const apiUrl = apiLambda.addFunctionUrl({
   authType: lambda.FunctionUrlAuthType.NONE,
-  cors: { allowedOrigins: ['*'], allowedMethods: [lambda.HttpMethod.GET] },
+  cors: {
+    allowedOrigins: ['https://d27cqsuosbietu.amplifyapp.com', 'http://localhost:*'],
+    allowedMethods: [lambda.HttpMethod.GET],
+    allowedHeaders: ['Content-Type'],
+  },
 });
 
 // ── Outputs ──
