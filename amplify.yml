@@ -15,20 +15,19 @@ frontend:
         - npm run build
     postBuild:
       commands:
+        - mkdir -p .amplify-hosting/static
+        - cp -r dist/* .amplify-hosting/static/
         - |
-          # 1. API_URL 주입 로직 (기존과 동일)
           if [ -f amplify_outputs.json ]; then
             API_URL=$(node -p "JSON.parse(require('fs').readFileSync('amplify_outputs.json','utf8')).custom?.apiUrl || ''")
             if [ -n "$API_URL" ]; then
-              if sed "s|PUBLIC_API_URL_PLACEHOLDER|${API_URL}|g" dist/index.html > dist/index.html.tmp && mv dist/index.html.tmp dist/index.html; then
-                echo "Injected API URL: $API_URL"
-              fi
+              find .amplify-hosting/static -name '*.html' -exec sed -i "s|PUBLIC_API_URL_PLACEHOLDER|${API_URL}|g" {} +
+              echo "Injected API URL: $API_URL"
             fi
           fi
-          # 2. SSR 매니페스트 파일이 생성되었다면 강제 삭제 (정적 배포 보장)
-          rm -f dist/deploy-manifest.json
+        - printf '{"version":1,"routes":[{"path":"/*","target":{"kind":"Static"}}],"framework":{"name":"astro","version":"5.0.0"}}' > .amplify-hosting/deploy-manifest.json
   artifacts:
-    baseDirectory: dist
+    baseDirectory: .amplify-hosting
     files:
       - '**/*'
   cache:
