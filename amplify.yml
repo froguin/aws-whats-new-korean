@@ -13,31 +13,6 @@ frontend:
     build:
       commands:
         - npm run build
-        - rm -f dist/deploy-manifest.json
-        - mkdir -p dist/static
-        - find dist -mindepth 1 -maxdepth 1 ! -name static -exec mv {} dist/static/ \;
-        - |
-          cat > dist/deploy-manifest.json <<'EOF'
-          {
-            "version": 1,
-            "routes": [
-              {
-                "path": "/*",
-                "target": {
-                  "kind": "Static"
-                },
-                "fallback": {
-                  "kind": "Static",
-                  "uri": "/index.html"
-                }
-              }
-            ],
-            "framework": {
-              "name": "astro",
-              "version": "5"
-            }
-          }
-          EOF
   artifacts:
     baseDirectory: dist
     files:
