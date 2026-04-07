@@ -158,6 +158,9 @@ export default function App() {
           </ContentLayout>
         }
       />
+      <Box textAlign="center" padding="l" color="text-body-secondary" fontSize="body-s">
+        © {new Date().getFullYear()} AWS What's New 한국어 요약. This is not an official AWS product or project.
+      </Box>
     </>
   );
 }
