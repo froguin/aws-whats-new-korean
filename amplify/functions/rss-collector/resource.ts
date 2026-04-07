@@ -5,4 +5,5 @@ export const rssCollector = defineFunction({
   schedule: 'every 15m',
   timeoutSeconds: 300,
   memoryMB: 256,
+  runtime: 20,
 });

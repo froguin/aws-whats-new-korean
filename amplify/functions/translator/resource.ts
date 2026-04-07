@@ -4,4 +4,5 @@ export const translator = defineFunction({
   name: 'translator',
   timeoutSeconds: 600,
   memoryMB: 512,
+  runtime: 20,
 });
