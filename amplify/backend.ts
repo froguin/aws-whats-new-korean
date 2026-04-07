@@ -93,7 +93,8 @@ table.grantReadData(api);
 const apiUrl = api.addFunctionUrl({
   authType: lambda.FunctionUrlAuthType.NONE,
   cors: {
-    allowedOrigins: ['https://d27cqsuosbietu.amplifyapp.com', 'http://localhost:*'],
+    // 특정 Amplify 도메인을 하드코딩하면 재배포/브랜치 프리뷰 도메인에서 CORS로 차단될 수 있음
+    allowedOrigins: ['*'],
     allowedMethods: [lambda.HttpMethod.GET],
     allowedHeaders: ['Content-Type'],
   },
