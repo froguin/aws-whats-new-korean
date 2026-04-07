@@ -1,5 +1,6 @@
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 
 const TABLE = process.env.TABLE_NAME;
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -10,7 +11,7 @@ const headers = {
   'Access-Control-Allow-Origin': '*',
 };
 
-exports.handler = async (event) => {
+export const handler = async (event: APIGatewayProxyEventV2) => {
   const path = event.rawPath || '/';
   const params = event.queryStringParameters || {};
 
