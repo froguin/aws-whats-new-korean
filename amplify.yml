@@ -25,7 +25,8 @@ frontend:
               echo "WARNING: apiUrl not found in amplify_outputs.json"
             fi
           else
-            echo "WARNING: amplify_outputs.json not found"
+            echo "ERROR: amplify_outputs.json not found - cannot proceed without API URL"
+            exit 1
           fi
   artifacts:
     baseDirectory: dist
