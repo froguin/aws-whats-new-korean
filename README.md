@@ -22,9 +22,9 @@ Amplify (Astro SSR)
 
 ## 번역 파이프라인
 
-1. **번역**: Nova Micro — 본문 요약 → 제목 도출 → 상태/대상/기능/리전 추출
+1. **번역**: Nova Lite — 본문 요약 → 제목 도출 → 상태/대상/기능/리전 추출
 2. **품질 게이트**: CJK 오염, 마크다운 잔재, 제목 잘림 등 자동 감지 → 재시도
-3. **AI 검수**: Nova Lite — 제목/상태/리전 등 필드별 교차 검증, 오류 시 수정
+3. **AI 검수**: Nova Micro — 제목/상태/리전 등 필드별 교차 검증, 오류 시 수정
 
 ## 비용
 
@@ -92,8 +92,8 @@ npx ampx sandbox         # 백엔드 샌드박스 (DynamoDB, SQS, Lambda)
 |---------|------|--------|
 | `TABLE_NAME` | DynamoDB 테이블명 | SAM 자동 생성 |
 | `QUEUE_URL` | SQS 큐 URL | SAM 자동 생성 |
-| `BEDROCK_TRANSLATE_MODEL` | 번역 모델 | `apac.amazon.nova-micro-v1:0` |
-| `BEDROCK_REVIEW_MODEL` | 검수 모델 | `apac.amazon.nova-lite-v1:0` |
+| `BEDROCK_TRANSLATE_MODEL` | 번역 모델 | `apac.amazon.nova-lite-v1:0` |
+| `BEDROCK_REVIEW_MODEL` | 검수 모델 | `apac.amazon.nova-micro-v1:0` |
 
 ## 라이선스
 
