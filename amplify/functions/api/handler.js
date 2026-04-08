@@ -32,9 +32,9 @@ export const handler = async (event) => {
     }));
     const items = (result.Items || []).map(i => ({
       id: i.pk, title: i.title_ko || i.title_en, titleEn: i.title_en,
-      summary: i.summary_ko || '', description: i.description || '',
+      summary: i.summary_ko || i.description || '', description: i.description || '',
       target: i.target || '', features: i.features || '', regions: i.regions || '',
-      status: i.status || '[]', url: i.url || i.pk, pubDate: i.pubDate,
+      status: i.status || '정식 출시', url: i.url || i.pk, pubDate: i.pubDate,
     }));
     return { statusCode: 200, headers, body: JSON.stringify({ items, count: items.length }) };
   }

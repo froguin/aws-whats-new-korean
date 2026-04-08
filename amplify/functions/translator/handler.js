@@ -14,8 +14,8 @@ OUTPUT: valid JSON only, no markdown wrapping, no code fences.
 RULES:
 - Keep product names, versions, dates, region codes in English as-is
 - Translate ALL other English to Korean
-- Title: product name + core change. Remove status tags like [Preview], [Launched]
-- Summary: 2 sentences. First: what changed. Second: why it matters
+- Title: product name + core change, specific and distinguishable. Remove status tags like [Preview], [Launched]
+- Summary: 1-2 short Korean sentences within 180 chars. First: what changed. Second: why it matters
 - Status: "preview" → 미리보기, "beta" → 베타, "retired" → 지원 종료, "GA"/"launched" → 정식 출시
 - "beta"/"preview" in version strings is NOT a service status
 - Features: 3 capability descriptions
@@ -43,6 +43,27 @@ async function invokeModel(modelId, system, userMsg) {
   return JSON.parse(text);
 }
 
+
+function normalizeStatus(status) {
+  const raw = Array.isArray(status) ? status.join(', ') : String(status || '').trim();
+  const s = raw.toLowerCase();
+  if (!s) return '정식 출시';
+  if (s.includes('정식 출시') || s.includes('launched') || s.includes('ga') || s === 'general availability') return '정식 출시';
+  if (s.includes('미리보기') || s.includes('preview')) return '미리보기';
+  if (s.includes('베타') || s.includes('beta')) return '베타';
+  if (s.includes('지원 종료') || s.includes('retired') || s.includes('deprecated')) return '지원 종료';
+  return raw;
+}
+
+function normalizeSummary(summary) {
+  if (typeof summary === 'string') return summary.replace(/\s+/g, ' ').trim().slice(0, 180);
+  if (summary && typeof summary === 'object') {
+    const merged = [summary.what_changed, summary.why_it_matters].filter(Boolean).join(' ');
+    return merged.replace(/\s+/g, ' ').trim().slice(0, 180);
+  }
+  return '';
+}
+
 function assessQuality(record) {
   const issues = [];
   if (!record.title || record.title.length < 5) issues.push('title_too_short');
@@ -55,7 +76,7 @@ function assessQuality(record) {
 export const handler = async (event) => {
   for (const sqsRecord of event.Records) {
     const article = JSON.parse(sqsRecord.body);
-    const { guid, title, description } = article;
+    const { guid, url, title, description } = article;
 
     try {
       const userMsg = `Title: ${title}\nDescription: ${description}`;
@@ -76,14 +97,17 @@ export const handler = async (event) => {
         record.summary = (record.summary || '').replace(/[一-龥ぁ-ヿ]/g, '');
       }
 
+      const normalizedSummary = normalizeSummary(record.summary);
+      const normalizedStatus = normalizeStatus(record.status);
+
       await ddb.send(new UpdateCommand({
         TableName: TABLE, Key: { pk: guid, sk: 'ARTICLE' },
-        UpdateExpression: 'SET title_ko = :tk, summary_ko = :sk, target = :tg, features = :ft, regions = :rg, #st = :st, gsi1pk = :gsi1pk, translatedAt = :ta',
+        UpdateExpression: 'SET title_ko = :tk, summary_ko = :sk, target = :tg, features = :ft, regions = :rg, #st = :st, url = if_not_exists(url, :url), gsi1pk = :gsi1pk, translatedAt = :ta',
         ExpressionAttributeNames: { '#st': 'status' },
         ExpressionAttributeValues: {
-          ':tk': record.title || '', ':sk': record.summary || '',
+          ':tk': record.title || '', ':sk': normalizedSummary,
           ':tg': record.target || '', ':ft': record.features || '',
-          ':rg': record.regions || '', ':st': JSON.stringify(record.status || []),
+          ':rg': record.regions || '', ':st': normalizedStatus, ':url': url || guid,
           ':gsi1pk': 'STATUS#translated', ':ta': new Date().toISOString(),
         },
       }));

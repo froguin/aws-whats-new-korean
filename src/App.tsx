@@ -12,6 +12,7 @@ interface Article {
   title: string;
   titleEn: string;
   summary: string | { what_changed?: string; why_it_matters?: string };
+  description?: string;
   target: string;
   features: string | string[];
   regions: string;
@@ -20,22 +21,40 @@ interface Article {
   pubDate: string;
 }
 
-function formatSummary(summary: Article['summary']): string {
-  if (typeof summary === 'string') return summary;
-  return [summary.what_changed, summary.why_it_matters].filter(Boolean).join(' ');
-}
-
-function formatStatus(status: string): string {
-  try { return status.replace(/[\[\]"]/g, '').trim(); } catch { return status; }
+function normalizeStatus(status: string): string {
+  const raw = (status || '').replace(/[\[\]"]/g, '').trim();
+  const s = raw.toLowerCase();
+  if (!s) return '정식 출시';
+  if (s.includes('정식 출시') || s.includes('launched') || s.includes('ga') || s === 'general availability') return '정식 출시';
+  if (s.includes('미리보기') || s.includes('preview')) return '미리보기';
+  if (s.includes('베타') || s.includes('beta')) return '베타';
+  if (s.includes('지원 종료') || s.includes('retired') || s.includes('deprecated')) return '지원 종료';
+  return raw;
 }
 
 function statusType(status: string): 'success' | 'info' | 'warning' | 'error' {
-  const s = formatStatus(status);
-  if (s.includes('정식 출시')) return 'success';
-  if (s.includes('미리보기')) return 'info';
-  if (s.includes('베타')) return 'warning';
-  if (s.includes('지원 종료')) return 'error';
+  const s = normalizeStatus(status);
+  if (s === '정식 출시') return 'success';
+  if (s === '미리보기') return 'info';
+  if (s === '베타') return 'warning';
+  if (s === '지원 종료') return 'error';
   return 'info';
+}
+
+function shorten(text: string, max = 140): string {
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  if (cleaned.length <= max) return cleaned;
+  return `${cleaned.slice(0, max - 1).trimEnd()}…`;
+}
+
+function formatSummary(article: Article): string {
+  const summary = article.summary;
+  const base = typeof summary === 'string'
+    ? summary
+    : [summary.what_changed, summary.why_it_matters].filter(Boolean).join(' ');
+  if (base && base.trim()) return shorten(base);
+  if (article.description) return shorten(article.description, 120);
+  return '요약 준비 중입니다.';
 }
 
 export default function App() {
@@ -58,7 +77,7 @@ export default function App() {
     const q = filterText.toLowerCase();
     return a.title?.toLowerCase().includes(q)
       || a.titleEn?.toLowerCase().includes(q)
-      || formatSummary(a.summary).toLowerCase().includes(q);
+      || formatSummary(a).toLowerCase().includes(q);
   });
 
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -106,9 +125,14 @@ export default function App() {
               }
               cardDefinition={{
                 header: item => (
-                  <Link href={item.url} external fontSize="heading-m">
-                    {item.title || item.titleEn}
-                  </Link>
+                  <SpaceBetween size="xxs">
+                    <Link href={item.url} external fontSize="heading-m">
+                      {item.title || item.titleEn}
+                    </Link>
+                    {item.title && item.titleEn && item.title !== item.titleEn && (
+                      <Box color="text-body-secondary" fontSize="body-s">EN: {item.titleEn}</Box>
+                    )}
+                  </SpaceBetween>
                 ),
                 sections: [
                   {
@@ -117,8 +141,9 @@ export default function App() {
                     content: item => (
                       <SpaceBetween direction="horizontal" size="xs">
                         <StatusIndicator type={statusType(item.status)}>
-                          {formatStatus(item.status) || '정식 출시'}
+                          {normalizeStatus(item.status)}
                         </StatusIndicator>
+                        {item.target ? <Badge>{item.target}</Badge> : null}
                         <Box color="text-body-secondary" fontSize="body-s">
                           {item.pubDate ? new Date(item.pubDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
                         </Box>
@@ -129,7 +154,7 @@ export default function App() {
                     id: 'summary',
                     header: '요약',
                     content: item => (
-                      <Box color="text-body-secondary">{formatSummary(item.summary)}</Box>
+                      <Box color="text-body-secondary">{formatSummary(item)}</Box>
                     ),
                   },
                   {

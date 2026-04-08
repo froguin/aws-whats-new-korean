@@ -16,8 +16,9 @@ SQS → Lambda:
 
 Amplify (Astro SSR)
   → /              Cloudscape 테마 대시보드
-  → /api/articles  기사 조회 API
-  → /api/stats     파이프라인 상태 API
+  → API Gateway HTTP API
+     ├─ /articles  기사 조회 API
+     └─ /stats     파이프라인 상태 API
 ```
 
 ## 번역 파이프라인
@@ -73,7 +74,7 @@ npx ampx sandbox         # 백엔드 샌드박스 (DynamoDB, SQS, Lambda)
 │   └── functions/
 │       ├── rss-collector/     # RSS 수집 (15분 크론)
 │       ├── translator/        # 번역+검수 (SQS trigger)
-│       └── api/               # API (Function URL)
+│       └── api/               # API (API Gateway HTTP API → Lambda)
 ├── scripts/
 │   └── migrate-from-netlify.js  # 데이터 마이그레이션 (일회성)
 ├── src/
@@ -94,6 +95,19 @@ npx ampx sandbox         # 백엔드 샌드박스 (DynamoDB, SQS, Lambda)
 | `QUEUE_URL` | SQS 큐 URL | SAM 자동 생성 |
 | `BEDROCK_TRANSLATE_MODEL` | 번역 모델 | `apac.amazon.nova-micro-v1:0` |
 | `BEDROCK_REVIEW_MODEL` | 검수 모델 | `apac.amazon.nova-lite-v1:0` |
+
+
+## 기존 데이터 재요약(재번역)
+
+이미 DynamoDB에 저장된 translated 아이템도 원문(`title_en`, `description`) 기준으로 다시 요약하려면 아래 스크립트로 SQS 재큐잉을 실행하세요.
+
+```bash
+TABLE_NAME=<출력된 테이블명> QUEUE_URL=<출력된 큐 URL> node scripts/retranslate-existing.cjs
+```
+
+옵션:
+- `DRY_RUN=1`: 실제 큐 전송 없이 대상 건수만 점검
+- `LIMIT=500`: 최대 500건만 재큐잉
 
 ## 라이선스
 
