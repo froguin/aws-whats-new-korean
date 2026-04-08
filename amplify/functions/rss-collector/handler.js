@@ -23,10 +23,11 @@ function parseRSS(xml) {
     };
     const title = get('title').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
     const guid = get('guid') || get('link');
+    const link = get('link') || guid;  // <link>가 실제 기사 URL, <guid>는 식별자
     const description = get('description').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
     const pubDate = get('pubDate');
     if (title && guid) {
-      items.push({ title, guid, description, pubDate: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString() });
+      items.push({ title, guid, link, description, pubDate: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString() });
     }
   }
   return items;
@@ -52,7 +53,7 @@ export const handler = async () => {
         pk: item.guid, sk: 'ARTICLE',
         gsi1pk: 'STATUS#pending', gsi1sk: item.pubDate,
         title_en: item.title, description: item.description,
-        url: item.guid, pubDate: item.pubDate, ttl,
+        url: item.link, pubDate: item.pubDate, ttl,
         createdAt: new Date().toISOString(),
       },
     }));
