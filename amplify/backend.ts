@@ -96,7 +96,7 @@ table.grantReadData(api);
 // Public endpoint is unified on API Gateway HTTP API (no Lambda Function URL).
 const httpApi = new apigwv2.HttpApi(stack, 'PublicApi', {
   corsPreflight: {
-    allowOrigins: ['*'],
+    allowOrigins: ['', ''],
     allowMethods: [apigwv2.CorsHttpMethod.GET],
     allowHeaders: ['Content-Type'],
   },
