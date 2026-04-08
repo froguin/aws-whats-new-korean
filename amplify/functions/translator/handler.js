@@ -10,7 +10,7 @@ const bedrock = new BedrockRuntimeClient({});
 
 const RULES = `- Keep product names, versions, dates, region codes in English as-is
 - Translate ALL other English to Korean. Never mix (e.g. "및" not "and 및")
-- Title: product name + core change. Remove status tags like [Preview], [Launched]
+- Title: product name + what changed, max 40 chars. Never just "출시" or "지원" alone
 - Summary: exactly 2 Korean sentences, max 150 chars. First: what changed. Second: why it matters
 - Status: "preview"→미리보기, "beta"→베타, "retired"→지원 종료, "GA"/"launched"→정식 출시
 - "beta"/"preview" in version strings is NOT a service status
@@ -24,6 +24,8 @@ const REV = `Review Korean cloud news cards. Fix errors per rules:\n${RULES}\nOU
 const FEW = [
   { role: 'user', content: [{ text: 'Title: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13.' }] },
   { role: 'assistant', content: [{ text: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원","summary":"Lambda 함수에서 Python 3.13의 주요 기능을 활용할 수 있게 되었습니다. 기존 Python 함수 운영 중이라면 업그레이드를 검토할 시점입니다.","target":"Python 기반 Lambda 개발자","features":"Python 3.13 런타임, 오류 메시지 개선, 성능 향상","regions":"모든 AWS 리전","status":["정식 출시"]}' }] },
+  { role: 'user', content: [{ text: 'Title: Announcing Amazon S3 Files, making S3 buckets accessible as file systems\nDescription: S3 Files delivers a shared file system that connects any AWS compute resource directly with your data in Amazon S3.' }] },
+  { role: 'assistant', content: [{ text: '{"title":"Amazon S3 Files로 S3 버킷을 파일 시스템으로 접근","summary":"S3 버킷의 데이터를 파일 시스템으로 직접 마운트하여 사용할 수 있게 되었습니다. 데이터 복제 없이 컴퓨팅 리소스에서 S3 데이터에 접근할 수 있습니다.","target":"S3 기반 데이터 파이프라인 운영자","features":"파일 시스템 접근, EFS 기반, 코드 변경 불필요","regions":"34개 AWS 리전","status":["정식 출시"]}' }] },
 ];
 
 async function invoke(modelId, system, messages) {
