@@ -5,7 +5,6 @@ import {
   TopNavigation,
 } from '@cloudscape-design/components';
 import { applyMode, Mode } from '@cloudscape-design/global-styles';
-import './fonts.css';
 
 const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
