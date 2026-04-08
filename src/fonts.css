@@ -7,11 +7,11 @@
 }
 
 /* Amazon Ember를 body와 모든 Cloudscape 요소에 적용 */
-body {
-  font-family: "Amazon Ember", "Noto Sans KR", sans-serif;
+:root {
+  --font-family-base-gmnpzl: "Amazon Ember", "Noto Sans KR", "Helvetica Neue", Roboto, Arial, sans-serif;
 }
 
-[class*="awsui"] {
-  font-family: "Amazon Ember", "Noto Sans KR", sans-serif !important;
+body {
+  font-family: "Amazon Ember", "Noto Sans KR", sans-serif;
 }
 
