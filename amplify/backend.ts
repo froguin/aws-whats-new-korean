@@ -92,6 +92,11 @@ const api = new NodejsFunction(stack, 'Api', {
 table.grantReadData(api);
 const apiUrl = api.addFunctionUrl({
   authType: lambda.FunctionUrlAuthType.NONE,
+  cors: {
+    allowedOrigins: ['https://d27cqsuosbietu.amplifyapp.com', 'http://localhost:*'],
+    allowedMethods: [lambda.HttpMethod.GET],
+    allowedHeaders: ['Content-Type'],
+  },
 });
 
 // ── Outputs ──

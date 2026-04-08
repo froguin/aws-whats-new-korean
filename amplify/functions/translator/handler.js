@@ -5,92 +5,55 @@ import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedroc
 const TABLE = process.env.TABLE_NAME;
 const TRANSLATE_MODEL = process.env.BEDROCK_TRANSLATE_MODEL;
 const REVIEW_MODEL = process.env.BEDROCK_REVIEW_MODEL;
-
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const bedrock = new BedrockRuntimeClient({});
 
-const SYSTEM_PROMPT = `You are a Korean cloud news summarizer for IT professionals.
-OUTPUT: valid JSON only, no markdown wrapping, no code fences.
-RULES:
-- Keep product names, versions, dates, region codes in English as-is
-- Translate ALL other English to Korean
+const RULES = `- Keep product names, versions, dates, region codes in English as-is
+- Translate ALL other English to Korean. Never mix (e.g. "및" not "and 및")
 - Title: product name + core change. Remove status tags like [Preview], [Launched]
-- Summary: 2 sentences. First: what changed. Second: why it matters
-- Status: "preview" → 미리보기, "beta" → 베타, "retired" → 지원 종료, "GA"/"launched" → 정식 출시
+- Summary: exactly 2 Korean sentences, max 150 chars. First: what changed. Second: why it matters
+- Status: "preview"→미리보기, "beta"→베타, "retired"→지원 종료, "GA"/"launched"→정식 출시
 - "beta"/"preview" in version strings is NOT a service status
-- Features: 3 capability descriptions
-- Regions: AWS Korean region names or "모든 AWS 리전"`;
+- Target: single sentence, max 50 chars
+- Features: comma-separated, max 3 items, max 80 chars total
+- Regions: AWS Korean region names or "모든 AWS 리전", max 60 chars`;
 
-const REVIEW_PROMPT = `You review Korean cloud news cards. Find errors:
-1. Chinese/Japanese characters in Korean text
-2. Hallucinated content not in the original
-3. Garbled or truncated text
-4. Status contradicting the description
-5. Title too vague or mirroring English
-OUTPUT JSON with corrected fields only. No code fences. If correct: {"pass":true}`;
+const SYS = `You are a Korean cloud news summarizer. OUTPUT: valid JSON only, no markdown, no code fences.\nRULES:\n${RULES}`;
+const REV = `Review Korean cloud news cards. Fix errors per rules:\n${RULES}\nOUTPUT corrected fields JSON only. If correct: {"pass":true}`;
 
-async function invokeModel(modelId, system, userMsg) {
-  const resp = await bedrock.send(new InvokeModelCommand({
+const FEW = [
+  { role: 'user', content: [{ text: 'Title: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13.' }] },
+  { role: 'assistant', content: [{ text: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원","summary":"Lambda 함수에서 Python 3.13의 주요 기능을 활용할 수 있게 되었습니다. 기존 Python 함수 운영 중이라면 업그레이드를 검토할 시점입니다.","target":"Python 기반 Lambda 개발자","features":"Python 3.13 런타임, 오류 메시지 개선, 성능 향상","regions":"모든 AWS 리전","status":["정식 출시"]}' }] },
+];
+
+async function invoke(modelId, system, messages) {
+  const r = await bedrock.send(new InvokeModelCommand({
     modelId, contentType: 'application/json', accept: 'application/json',
-    body: JSON.stringify({
-      schemaVersion: 'messages-v1', system: [{ text: system }],
-      messages: [{ role: 'user', content: [{ text: userMsg }] }],
-    }),
+    body: JSON.stringify({ schemaVersion: 'messages-v1', system: [{ text: system }], messages }),
   }));
-  const parsed = JSON.parse(new TextDecoder().decode(resp.body));
-  let text = parsed.output?.message?.content?.[0]?.text || '';
-  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-  return JSON.parse(text);
-}
-
-function assessQuality(record) {
-  const issues = [];
-  if (!record.title || record.title.length < 5) issues.push('title_too_short');
-  if (!record.summary || record.summary.length < 20) issues.push('summary_too_short');
-  if (/[一-龥ぁ-ヿ]/.test((record.title || '') + (record.summary || ''))) issues.push('cjk_contamination');
-  if (/[_*`]/.test(record.summary || '')) issues.push('markdown_artifacts');
-  return issues;
+  let t = JSON.parse(new TextDecoder().decode(r.body)).output?.message?.content?.[0]?.text || '';
+  return JSON.parse(t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim());
 }
 
 export const handler = async (event) => {
-  for (const sqsRecord of event.Records) {
-    const article = JSON.parse(sqsRecord.body);
-    const { guid, title, description } = article;
-
+  for (const rec of event.Records) {
+    const { guid, title, description } = JSON.parse(rec.body);
     try {
-      const userMsg = `Title: ${title}\nDescription: ${description}`;
-      let record = await invokeModel(TRANSLATE_MODEL, SYSTEM_PROMPT, userMsg);
-
-      if (assessQuality(record).length > 0) {
-        record = await invokeModel(TRANSLATE_MODEL, SYSTEM_PROMPT, userMsg);
-      }
-
+      const msg = [...FEW, { role: 'user', content: [{ text: `Title: ${title}\nDescription: ${description}` }] }];
+      let r = await invoke(TRANSLATE_MODEL, SYS, msg);
+      if (!r.title || r.title.length < 5 || /[一-龥ぁ-ヿ]/.test(r.title + r.summary)) r = await invoke(TRANSLATE_MODEL, SYS, msg);
       try {
-        const reviewMsg = `Original Title: ${title}\nOriginal Description: ${description}\n\nTranslated:\n${JSON.stringify(record)}`;
-        const review = await invokeModel(REVIEW_MODEL, REVIEW_PROMPT, reviewMsg);
-        if (!review.pass) record = { ...record, ...review, pass: undefined };
-      } catch { /* review failed, keep original */ }
-
-      if (/[一-龥ぁ-ヿ]/.test((record.title || '') + (record.summary || ''))) {
-        record.title = (record.title || '').replace(/[一-龥ぁ-ヿ]/g, '');
-        record.summary = (record.summary || '').replace(/[一-龥ぁ-ヿ]/g, '');
-      }
-
+        const rev = await invoke(REVIEW_MODEL, REV, [{ role: 'user', content: [{ text: `Original: ${title}\n\nTranslated:\n${JSON.stringify(r)}` }] }]);
+        if (!rev.pass) r = { ...r, ...rev, pass: undefined };
+      } catch {}
+      const ft = Array.isArray(r.features) ? r.features.join(', ') : (r.features || '');
       await ddb.send(new UpdateCommand({
         TableName: TABLE, Key: { pk: guid, sk: 'ARTICLE' },
-        UpdateExpression: 'SET title_ko = :tk, summary_ko = :sk, target = :tg, features = :ft, regions = :rg, #st = :st, gsi1pk = :gsi1pk, translatedAt = :ta',
+        UpdateExpression: 'SET title_ko=:tk, summary_ko=:sk, target=:tg, features=:ft, regions=:rg, #st=:st, gsi1pk=:g, translatedAt=:ta',
         ExpressionAttributeNames: { '#st': 'status' },
-        ExpressionAttributeValues: {
-          ':tk': record.title || '', ':sk': record.summary || '',
-          ':tg': record.target || '', ':ft': record.features || '',
-          ':rg': record.regions || '', ':st': JSON.stringify(record.status || []),
-          ':gsi1pk': 'STATUS#translated', ':ta': new Date().toISOString(),
-        },
+        ExpressionAttributeValues: { ':tk': r.title||'', ':sk': r.summary||'', ':tg': r.target||'', ':ft': ft, ':rg': r.regions||'', ':st': JSON.stringify(r.status||[]), ':g': 'STATUS#translated', ':ta': new Date().toISOString() },
       }));
-      console.log(`Translated ${guid}: ${record.title}`);
-    } catch (err) {
-      console.error(`Failed ${guid}:`, err.message);
-      throw err;
-    }
+      console.log(`OK ${guid}: ${r.title}`);
+    } catch (e) { console.error(`FAIL ${guid}:`, e.message); throw e; }
   }
 };
