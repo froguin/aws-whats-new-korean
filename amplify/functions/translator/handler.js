@@ -41,12 +41,15 @@ export const handler = async (event) => {
     try {
       const msg = [...FEW, { role: 'user', content: [{ text: `Title: ${title}\nDescription: ${description}` }] }];
       let r = await invoke(TRANSLATE_MODEL, SYS, msg);
-      if (!r.title || r.title.length < 5 || !r.summary || r.summary.length < 10 || /[一-龥ぁ-ヿ]/.test(r.title + r.summary)) r = await invoke(TRANSLATE_MODEL, SYS, msg);
-      if (!r.summary || r.summary.length < 10) r = await invoke(TRANSLATE_MODEL, SYS, msg);
+      const valid = (o) => o.title?.length >= 5 && o.summary?.length >= 10 && o.target && o.features && o.regions;
+      if (!valid(r) || /[一-龥ぁ-ヿ]/.test(r.title + r.summary)) r = await invoke(TRANSLATE_MODEL, SYS, msg);
+      if (!valid(r)) r = await invoke(TRANSLATE_MODEL, SYS, msg);
       try {
         const rev = await invoke(REVIEW_MODEL, REV, [{ role: 'user', content: [{ text: `Original: ${title}\n\nTranslated:\n${JSON.stringify(r)}` }] }]);
         if (!rev.pass) r = { ...r, ...rev, pass: undefined };
       } catch {}
+      if (!valid(r)) throw new Error(`Incomplete translation: ${JSON.stringify({title:!!r.title,summary:!!r.summary,target:!!r.target,features:!!r.features,regions:!!r.regions})}`);
+      const ft = Array.isArray(r.features) ? r.features.join(', ') : (r.features || '');
       const ft = Array.isArray(r.features) ? r.features.join(', ') : (r.features || '');
       await ddb.send(new UpdateCommand({
         TableName: TABLE, Key: { pk: guid, sk: 'ARTICLE' },
