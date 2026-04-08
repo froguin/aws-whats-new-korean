@@ -4,9 +4,10 @@ import {
   SpaceBetween, Link, TextFilter, Pagination, StatusIndicator,
   TopNavigation,
 } from '@cloudscape-design/components';
+import { applyMode, Mode } from '@cloudscape-design/global-styles';
 import './fonts.css';
 
-const API_URL = import.meta.env.VITE_API_URL || '';
+const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 interface Article {
   id: string;
@@ -45,6 +46,12 @@ export default function App() {
   const [filterText, setFilterText] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 12;
+  const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark');
+
+  useEffect(() => {
+    applyMode(isDark ? Mode.Dark : Mode.Light);
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  }, [isDark]);
 
   useEffect(() => {
     if (!API_URL) { setLoading(false); return; }
@@ -69,6 +76,7 @@ export default function App() {
       <TopNavigation
         identity={{ href: '/', title: 'AWS What\'s New 한국어 요약' }}
         utilities={[
+          { type: 'button', text: isDark ? '라이트 모드' : '다크 모드', onClick: () => setIsDark(d => !d) },
           { type: 'button', text: 'GitHub', href: 'https://github.com/froguin/aws-whats-new-korean', external: true },
         ]}
       />
