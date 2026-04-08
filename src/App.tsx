@@ -4,6 +4,7 @@ import {
   SpaceBetween, Link, TextFilter, Pagination, StatusIndicator,
   TopNavigation,
 } from '@cloudscape-design/components';
+import './fonts.css';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
