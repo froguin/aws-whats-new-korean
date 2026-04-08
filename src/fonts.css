@@ -6,9 +6,9 @@
     font-display: swap;
 }
 
-/* Amazon Ember를 body와 모든 Cloudscape 요소에 적용 */
+/* Amazon Ember를 Cloudscape CSS 변수로 오버라이드 */
 :root {
-  --font-family-base-gmnpzl: "Amazon Ember", "Noto Sans KR", "Helvetica Neue", Roboto, Arial, sans-serif;
+  --font-family-base-gmnpzl: "Amazon Ember", "Noto Sans KR", "Helvetica Neue", Roboto, Arial, sans-serif !important;
 }
 
 body {
