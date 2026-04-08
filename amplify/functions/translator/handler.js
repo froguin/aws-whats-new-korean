@@ -41,7 +41,8 @@ export const handler = async (event) => {
     try {
       const msg = [...FEW, { role: 'user', content: [{ text: `Title: ${title}\nDescription: ${description}` }] }];
       let r = await invoke(TRANSLATE_MODEL, SYS, msg);
-      if (!r.title || r.title.length < 5 || /[一-龥ぁ-ヿ]/.test(r.title + r.summary)) r = await invoke(TRANSLATE_MODEL, SYS, msg);
+      if (!r.title || r.title.length < 5 || !r.summary || r.summary.length < 10 || /[一-龥ぁ-ヿ]/.test(r.title + r.summary)) r = await invoke(TRANSLATE_MODEL, SYS, msg);
+      if (!r.summary || r.summary.length < 10) r = await invoke(TRANSLATE_MODEL, SYS, msg);
       try {
         const rev = await invoke(REVIEW_MODEL, REV, [{ role: 'user', content: [{ text: `Original: ${title}\n\nTranslated:\n${JSON.stringify(r)}` }] }]);
         if (!rev.pass) r = { ...r, ...rev, pass: undefined };

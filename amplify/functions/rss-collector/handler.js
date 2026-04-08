@@ -23,7 +23,7 @@ function parseRSS(xml) {
     };
     const title = get('title').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
     const guid = get('guid') || get('link');
-    const link = get('link') || guid;  // <link>가 실제 기사 URL, <guid>는 식별자
+    const link = get('link') || guid;  // <link>가 실제 기사 URL, <guid>는 식별자  // <link>가 실제 기사 URL, <guid>는 식별자
     const description = get('description').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
     const pubDate = get('pubDate');
     if (title && guid) {
