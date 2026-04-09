@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-  AppLayout, ContentLayout, Header, Cards, Box,
+  AppLayout, Header, Cards, Box,
   SpaceBetween, Link, TextFilter, Pagination, StatusIndicator,
-  TopNavigation, Toggle,
+  TopNavigation,
 } from '@cloudscape-design/components';
 import { applyMode, Mode } from '@cloudscape-design/global-styles';
 
@@ -30,6 +30,15 @@ function fmtSummary(s: any): string {
   if (typeof s === 'string') return s;
   return [s.what_changed, s.why_it_matters].filter(Boolean).join(' ');
 }
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return '방금 전';
+  if (m < 60) return `${m}분 전`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}시간 전`;
+  return `${Math.floor(h / 24)}일 전`;
+}
 
 export default function App() {
   const [items, setItems] = useState<Article[]>([]);
@@ -54,6 +63,7 @@ export default function App() {
     return (a.title||'').toLowerCase().includes(q) || (a.titleEn||'').toLowerCase().includes(q) || fmtSummary(a.summary).toLowerCase().includes(q);
   });
   const paged = filtered.slice((page-1)*ps, page*ps);
+  const latestDate = items[0]?.pubDate;
 
   return <>
     <TopNavigation
@@ -67,38 +77,37 @@ export default function App() {
       ]}
     />
     <AppLayout navigationHide toolsHide content={
-      <ContentLayout header={
-        <Header variant="h1" counter={`(${filtered.length})`}>
-          AWS 공식 릴리스 노트를 한국어로 자동 번역·검수하여 보여줍니다.
-        </Header>
-      }>
-        <Cards loading={loading} loadingText="업데이트를 불러오는 중..."
-          items={paged}
-          filter={<TextFilter filteringText={filter} filteringPlaceholder="키워드로 검색" onChange={({detail}) => { setFilter(detail.filteringText); setPage(1); }} />}
-          pagination={<Pagination currentPageIndex={page} pagesCount={Math.ceil(filtered.length/ps)||1} onChange={({detail}) => setPage(detail.currentPageIndex)} />}
-          cardDefinition={{
-            header: item => <Link href={item.url} external fontSize="heading-m">{item.title || item.titleEn}</Link>,
-            sections: [
-              { id: 'meta', header: '상태', content: item => (
-                <SpaceBetween direction="horizontal" size="xs">
-                  <StatusIndicator type={statusType(item.status)}>{fmtStatus(item.status)}</StatusIndicator>
-                  <Box color="text-body-secondary" fontSize="body-s">
-                    {item.pubDate ? new Date(item.pubDate).toLocaleDateString('ko-KR',{year:'numeric',month:'short',day:'numeric'}) : ''}
-                  </Box>
-                </SpaceBetween>
-              )},
-              { id: 'summary', header: '요약', content: item => {
-                const s = fmtSummary(item.summary);
-                return s ? <Box>{s}</Box> : null;
-              }},
-              { id: 'target', header: '대상', content: item => item.target ? <Box color="text-body-secondary" fontSize="body-s">{item.target}</Box> : null },
-              { id: 'features', header: '주요 기능', content: item => item.features ? <Box color="text-body-secondary" fontSize="body-s">{item.features}</Box> : null },
-              { id: 'regions', header: '리전', content: item => item.regions ? <Box color="text-body-secondary" fontSize="body-s">{item.regions}</Box> : null },
-            ],
-          }}
-          empty={<Box textAlign="center" padding="l">{API_URL ? '표시할 업데이트가 없습니다.' : 'API URL이 설정되지 않았습니다.'}</Box>}
-        />
-      </ContentLayout>
+      <Cards loading={loading} loadingText="업데이트를 불러오는 중..."
+        items={paged}
+        header={
+          <Header description={latestDate ? `최근 업데이트: ${timeAgo(latestDate)}` : ''}>
+            {`${filtered.length}개 새 소식`}
+          </Header>
+        }
+        filter={<TextFilter filteringText={filter} filteringPlaceholder="키워드로 검색" onChange={({detail}) => { setFilter(detail.filteringText); setPage(1); }} />}
+        pagination={<Pagination currentPageIndex={page} pagesCount={Math.ceil(filtered.length/ps)||1} onChange={({detail}) => setPage(detail.currentPageIndex)} />}
+        cardDefinition={{
+          header: item => <Link href={item.url} external fontSize="heading-m">{item.title || item.titleEn}</Link>,
+          sections: [
+            { id: 'meta', header: '상태', content: item => (
+              <SpaceBetween direction="horizontal" size="xs">
+                <StatusIndicator type={statusType(item.status)}>{fmtStatus(item.status)}</StatusIndicator>
+                <Box color="text-body-secondary" fontSize="body-s">
+                  {item.pubDate ? new Date(item.pubDate).toLocaleDateString('ko-KR',{year:'numeric',month:'short',day:'numeric'}) : ''}
+                </Box>
+              </SpaceBetween>
+            )},
+            { id: 'summary', header: '요약', content: item => {
+              const s = fmtSummary(item.summary);
+              return s ? <Box>{s}</Box> : null;
+            }},
+            { id: 'target', header: '대상', content: item => item.target ? <Box color="text-body-secondary" fontSize="body-s">{item.target}</Box> : null },
+            { id: 'features', header: '주요 기능', content: item => item.features ? <Box color="text-body-secondary" fontSize="body-s">{item.features}</Box> : null },
+            { id: 'regions', header: '리전', content: item => item.regions ? <Box color="text-body-secondary" fontSize="body-s">{item.regions}</Box> : null },
+          ],
+        }}
+        empty={<Box textAlign="center" padding="l">{API_URL ? '표시할 업데이트가 없습니다.' : 'API URL이 설정되지 않았습니다.'}</Box>}
+      />
     } />
     <Box textAlign="center" padding="l" color="text-body-secondary" fontSize="body-s">
       © {new Date().getFullYear()} AWS What's New 한국어 요약. This is not an official AWS product or project.
