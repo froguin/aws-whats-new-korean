@@ -24,8 +24,6 @@ const REV = `Review Korean cloud news cards. Fix errors per rules:\n${RULES}\nOU
 const FEW = [
   { role: 'user', content: [{ text: 'Title: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13.' }] },
   { role: 'assistant', content: [{ text: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원","summary":"Lambda 함수에서 Python 3.13의 주요 기능을 활용할 수 있게 되었습니다. 기존 Python 함수 운영 중이라면 업그레이드를 검토할 시점입니다.","target":"Python 기반 Lambda 개발자","features":"Python 3.13 런타임, 오류 메시지 개선, 성능 향상","regions":"모든 AWS 리전","status":["정식 출시"]}' }] },
-  { role: 'user', content: [{ text: 'Title: Announcing Amazon S3 Files, making S3 buckets accessible as file systems\nDescription: S3 Files delivers a shared file system that connects any AWS compute resource directly with your data in Amazon S3.' }] },
-  { role: 'assistant', content: [{ text: '{"title":"Amazon S3 Files로 S3 버킷을 파일 시스템으로 접근","summary":"S3 버킷의 데이터를 파일 시스템으로 직접 마운트하여 사용할 수 있게 되었습니다. 데이터 복제 없이 컴퓨팅 리소스에서 S3 데이터에 접근할 수 있습니다.","target":"S3 기반 데이터 파이프라인 운영자","features":"파일 시스템 접근, EFS 기반, 코드 변경 불필요","regions":"34개 AWS 리전","status":["정식 출시"]}' }] },
 ];
 
 async function invoke(modelId, system, messages) {
@@ -37,9 +35,20 @@ async function invoke(modelId, system, messages) {
   return JSON.parse(t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim());
 }
 
+function normalizeStatus(status) {
+  const raw = Array.isArray(status) ? status.join(', ') : String(status || '').trim();
+  const s = raw.toLowerCase();
+  if (!s) return '정식 출시';
+  if (s.includes('정식 출시') || s.includes('launched') || s.includes('ga') || s === 'general availability') return '정식 출시';
+  if (s.includes('미리보기') || s.includes('preview')) return '미리보기';
+  if (s.includes('베타') || s.includes('beta')) return '베타';
+  if (s.includes('지원 종료') || s.includes('retired') || s.includes('deprecated')) return '지원 종료';
+  return raw;
+}
+
 export const handler = async (event) => {
   for (const rec of event.Records) {
-    const { guid, title, description } = JSON.parse(rec.body);
+    const { guid, url, title, description } = JSON.parse(rec.body);
     try {
       const msg = [...FEW, { role: 'user', content: [{ text: `Title: ${title}\nDescription: ${description}` }] }];
       let r = await invoke(TRANSLATE_MODEL, SYS, msg);
@@ -54,9 +63,9 @@ export const handler = async (event) => {
       const ft = Array.isArray(r.features) ? r.features.join(', ') : (r.features || '');
       await ddb.send(new UpdateCommand({
         TableName: TABLE, Key: { pk: guid, sk: 'ARTICLE' },
-        UpdateExpression: 'SET title_ko=:tk, summary_ko=:sk, target=:tg, features=:ft, regions=:rg, #st=:st, gsi1pk=:g, translatedAt=:ta',
-        ExpressionAttributeNames: { '#st': 'status' },
-        ExpressionAttributeValues: { ':tk': r.title||'', ':sk': r.summary||'', ':tg': r.target||'', ':ft': ft, ':rg': r.regions||'', ':st': JSON.stringify(r.status||[]), ':g': 'STATUS#translated', ':ta': new Date().toISOString() },
+        UpdateExpression: 'SET title_ko=:tk, summary_ko=:sk, target=:tg, features=:ft, regions=:rg, #st=:st, #u=if_not_exists(#u,:u), gsi1pk=:g, translatedAt=:ta',
+        ExpressionAttributeNames: { '#st': 'status', '#u': 'url' },
+        ExpressionAttributeValues: { ':tk': r.title||'', ':sk': r.summary||'', ':tg': r.target||'', ':ft': ft, ':rg': r.regions||'', ':st': normalizeStatus(r.status), ':u': url || guid, ':g': 'STATUS#translated', ':ta': new Date().toISOString() },
       }));
       console.log(`OK ${guid}: ${r.title}`);
     } catch (e) { console.error(`FAIL ${guid}:`, e.message); throw e; }
