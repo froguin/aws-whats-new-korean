@@ -68,8 +68,8 @@ export default function App() {
     />
     <AppLayout navigationHide toolsHide content={
       <ContentLayout header={
-        <Header variant="h1" description="AWS 공식 릴리스 노트를 한국어로 자동 번역·검수하여 보여줍니다." counter={`(${filtered.length})`}>
-          최신 업데이트
+        <Header variant="h1" counter={`(${filtered.length})`}>
+          AWS 공식 릴리스 노트를 한국어로 자동 번역·검수하여 보여줍니다.
         </Header>
       }>
         <Cards loading={loading} loadingText="업데이트를 불러오는 중..."
