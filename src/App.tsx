@@ -82,7 +82,7 @@ export default function App() {
         header={
           <Box padding={{ bottom: 'xs' }}>
             <Box color="text-body-secondary" fontSize="body-s">
-              AWS 공식 릴리스 노트를 한국어로 자동 번역·검수하여 보여줍니다. {filtered.length}개의 새 소식이 있습니다.{latestDate ? ` · 최근 업데이트: ${timeAgo(latestDate)}` : ''}
+              AWS 공식 릴리스 노트를 한국어로 자동 번역·검수하여 보여줍니다. 현재 {filtered.length}개의 새 소식이 있습니다.{latestDate ? ` · 최근 업데이트: ${timeAgo(latestDate)}` : ''}
             </Box>
           </Box>
         }
