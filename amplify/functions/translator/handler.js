@@ -52,7 +52,6 @@ export const handler = async (event) => {
       } catch {}
       if (!valid(r)) throw new Error(`Incomplete translation: ${JSON.stringify({title:!!r.title,summary:!!r.summary,target:!!r.target,features:!!r.features,regions:!!r.regions})}`);
       const ft = Array.isArray(r.features) ? r.features.join(', ') : (r.features || '');
-      const ft = Array.isArray(r.features) ? r.features.join(', ') : (r.features || '');
       await ddb.send(new UpdateCommand({
         TableName: TABLE, Key: { pk: guid, sk: 'ARTICLE' },
         UpdateExpression: 'SET title_ko=:tk, summary_ko=:sk, target=:tg, features=:ft, regions=:rg, #st=:st, gsi1pk=:g, translatedAt=:ta',
