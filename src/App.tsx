@@ -85,7 +85,7 @@ export default function App() {
       splitPanelOpen={splitOpen}
       onSplitPanelToggle={({ detail }) => setSplitOpen(detail.open)}
       splitPanelPreferences={{ position: 'side' }}
-      splitPanelSize={Math.round(window.innerWidth * 0.45)}
+      splitPanelSize={Math.round(window.innerWidth * 0.55)}
       splitPanel={
         detail ? (
           <SplitPanel header={detail.title || detail.titleEn} hidePreferencesButton closeBehavior="hide"
