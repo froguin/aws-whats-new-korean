@@ -14,11 +14,8 @@ body {
 }
 
 
-/* 모바일에서 TopNavigation 오버플로 메뉴 버튼 숨김 */
+/* 모바일 레이아웃 */
 @media (max-width: 768px) {
-  [class*="awsui_overflow-menu-trigger"] {
-    display: none !important;
-  }
   .desc-break {
     display: block;
   }
