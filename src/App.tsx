@@ -76,7 +76,7 @@ export default function App() {
             ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
             : <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><circle cx="10" cy="10" r="4"/><path d="M10 1v2m0 14v2m-7-9H1m18 0h-2m-1.3-5.3l-1.4 1.4M5.7 14.3l-1.4 1.4m0-11.4l1.4 1.4m8.6 8.6l1.4 1.4"/></svg>,
           title: dark ? '다크 모드' : '라이트 모드', onClick: () => setDark(d => !d), disableUtilityCollapse: true },
-        { type: 'button', text: 'GitHub', href: 'https://github.com/froguin/aws-whats-new-korean', external: true, disableUtilityCollapse: true },
+        { type: 'button', text: 'GitHub', href: 'https://github.com/froguin/aws-whats-new-korean', external: true },
       ]}
     />
     <AppLayout
@@ -119,7 +119,7 @@ export default function App() {
           header={
             <Box padding={{ bottom: 'xs' }}>
               <Box color="text-body-secondary" fontSize="body-m">
-                AWS 공식 릴리스 노트를 한국어로 자동 번역·검수하여 보여줍니다. 현재 {filtered.length}개의 새 소식이 있습니다.{latestDate ? ` 최근 업데이트: ${timeAgo(latestDate)}` : ''}
+                AWS 공식 릴리스 노트를 한국어로 자동 번역·검수하여 보여줍니다.{' '}<span className="desc-break" />현재 {filtered.length}개의 새 소식이 있습니다.{latestDate ? ` 최근 업데이트: ${timeAgo(latestDate)}` : ''}
               </Box>
             </Box>
           }

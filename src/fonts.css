@@ -19,4 +19,10 @@ body {
   [class*="awsui_overflow-menu-trigger"] {
     display: none !important;
   }
+  .desc-break {
+    display: block;
+  }
+}
+.desc-break {
+  display: none;
 }
