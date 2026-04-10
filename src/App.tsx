@@ -85,7 +85,7 @@ export default function App() {
       splitPanelOpen={splitOpen}
       onSplitPanelToggle={({ detail }) => setSplitOpen(detail.open)}
       splitPanelPreferences={{ position: 'side' }}
-      splitPanelSize={450}
+      splitPanelSize={600}
       splitPanel={
         detail ? (
           <SplitPanel header={detail.title || detail.titleEn} hidePreferencesButton closeBehavior="hide"
@@ -117,7 +117,9 @@ export default function App() {
           loading={loading}
           loadingText="업데이트를 불러오는 중..."
           items={paged}
-          onRowClick={({ detail }) => { setSelected([detail.item]); setSplitOpen(true); }}
+          selectionType="single"
+          selectedItems={selected}
+          onSelectionChange={({ detail }) => { setSelected(detail.selectedItems); setSplitOpen(true); }}
           stickyHeader
           variant="full-page"
           header={
