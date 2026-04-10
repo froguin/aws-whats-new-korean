@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  AppLayout, Table, Box, SplitPanel,
+  AppLayout, Table, Cards, Box, SplitPanel,
   SpaceBetween, Link, TextFilter, Pagination, StatusIndicator,
   TopNavigation,
 } from '@cloudscape-design/components';
@@ -39,6 +39,18 @@ function timeAgo(dateStr: string): string {
   if (h < 24) return `${h}시간 전`;
   return `${Math.floor(h / 24)}일 전`;
 }
+function fmtDate(d: string) {
+  return d ? new Date(d).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : '';
+}
+function useIsMobile() {
+  const [mobile, setMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const h = () => setMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
+  return mobile;
+}
 
 export default function App() {
   const [items, setItems] = useState<Article[]>([]);
@@ -47,7 +59,8 @@ export default function App() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Article[]>([]);
   const [splitOpen, setSplitOpen] = useState(false);
-  const ps = 30;
+  const isMobile = useIsMobile();
+  const ps = isMobile ? 12 : 30;
   const [dark, setDark] = useState(() => {
     const s = localStorage.getItem('theme');
     return s ? s === 'dark' : matchMedia('(prefers-color-scheme:dark)').matches;
@@ -68,6 +81,37 @@ export default function App() {
   const latestDate = items[0]?.pubDate;
   const detail = selected[0];
 
+  const headerEl = (
+    <Box padding={{ bottom: 'xs' }}>
+      <Box color="text-body-secondary" fontSize="body-m">
+        AWS 공식 릴리스 노트를 한국어로 자동 번역·검수하여 보여줍니다.{isMobile ? <br /> : ' '}현재 {filtered.length}개의 새 소식이 있습니다.{latestDate ? ` 최근 업데이트: ${timeAgo(latestDate)}` : ''}
+      </Box>
+    </Box>
+  );
+  const filterEl = <TextFilter filteringText={filter} filteringPlaceholder="키워드로 검색" onChange={({detail}) => { setFilter(detail.filteringText); setPage(1); }} />;
+  const paginationEl = <Pagination currentPageIndex={page} pagesCount={Math.ceil(filtered.length/ps)||1} onChange={({detail}) => setPage(detail.currentPageIndex)} />;
+  const emptyEl = <Box textAlign="center" padding="l">{API_URL ? '표시할 업데이트가 없습니다.' : 'API URL이 설정되지 않았습니다.'}</Box>;
+
+  const splitPanel = detail ? (
+    <SplitPanel header={detail.title || detail.titleEn} hidePreferencesButton closeBehavior="hide"
+      i18nStrings={{ preferencesTitle:'', preferencesPositionLabel:'', preferencesPositionDescription:'', preferencesPositionSide:'', preferencesPositionBottom:'', preferencesConfirm:'', preferencesCancel:'', closeButtonAriaLabel:'닫기', openButtonAriaLabel:'열기', resizeHandleAriaLabel:'' }}>
+      <SpaceBetween size="m">
+        {detail.titleEn && detail.title !== detail.titleEn && (
+          <Box color="text-body-secondary" fontSize="body-s">{detail.titleEn}</Box>
+        )}
+        <SpaceBetween direction="horizontal" size="xs">
+          <StatusIndicator type={statusType(detail.status)}>{fmtStatus(detail.status)}</StatusIndicator>
+          <Box color="text-body-secondary" fontSize="body-s">{detail.pubDate ? new Date(detail.pubDate).toLocaleDateString('ko-KR', { year:'numeric', month:'short', day:'numeric' }) : ''}</Box>
+        </SpaceBetween>
+        <Box><Box variant="awsui-key-label">요약</Box><Box>{fmtSummary(detail.summary) || '요약 없음'}</Box></Box>
+        {detail.target && <Box><Box variant="awsui-key-label">대상</Box><Box>{detail.target}</Box></Box>}
+        {detail.features && <Box><Box variant="awsui-key-label">주요 기능</Box><Box>{detail.features}</Box></Box>}
+        {detail.regions && <Box><Box variant="awsui-key-label">리전</Box><Box>{detail.regions}</Box></Box>}
+        <Link href={detail.url} external>원문 보기</Link>
+      </SpaceBetween>
+    </SplitPanel>
+  ) : null;
+
   return <>
     <TopNavigation
       identity={{ href: '/', title: "AWS What's New 한국어 요약" }}
@@ -79,83 +123,68 @@ export default function App() {
         { type: 'button', text: 'GitHub', href: 'https://github.com/froguin/aws-whats-new-korean', external: true, disableUtilityCollapse: true },
       ]}
     />
-    <AppLayout
-      navigationHide
-      toolsHide
-      splitPanelOpen={splitOpen}
-      onSplitPanelToggle={({ detail }) => setSplitOpen(detail.open)}
-      splitPanelPreferences={{ position: 'side' }}
-      splitPanelSize={Math.round(window.innerWidth * 0.55)}
-      splitPanel={
-        detail ? (
-          <SplitPanel header={detail.title || detail.titleEn} hidePreferencesButton closeBehavior="hide"
-            i18nStrings={{ preferencesTitle: '', preferencesPositionLabel: '', preferencesPositionDescription: '', preferencesPositionSide: '', preferencesPositionBottom: '', preferencesConfirm: '', preferencesCancel: '', closeButtonAriaLabel: '닫기', openButtonAriaLabel: '열기', resizeHandleAriaLabel: '' }}>
-            <SpaceBetween size="m">
-              {detail.titleEn && detail.title !== detail.titleEn && (
-                <Box color="text-body-secondary" fontSize="body-s">{detail.titleEn}</Box>
-              )}
-              <SpaceBetween direction="horizontal" size="xs">
-                <StatusIndicator type={statusType(detail.status)}>{fmtStatus(detail.status)}</StatusIndicator>
-                <Box color="text-body-secondary" fontSize="body-s">
-                  {detail.pubDate ? new Date(detail.pubDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
-                </Box>
-              </SpaceBetween>
-              <Box>
-                <Box variant="awsui-key-label">요약</Box>
-                <Box>{fmtSummary(detail.summary) || '요약 없음'}</Box>
-              </Box>
-              {detail.target && <Box><Box variant="awsui-key-label">대상</Box><Box>{detail.target}</Box></Box>}
-              {detail.features && <Box><Box variant="awsui-key-label">주요 기능</Box><Box>{detail.features}</Box></Box>}
-              {detail.regions && <Box><Box variant="awsui-key-label">리전</Box><Box>{detail.regions}</Box></Box>}
-              <Link href={detail.url} external>원문 보기</Link>
-            </SpaceBetween>
-          </SplitPanel>
-        ) : null
-      }
-      content={
-        <Table
-          loading={loading}
-          loadingText="업데이트를 불러오는 중..."
-          items={paged}
-          selectionType="single"
-          selectedItems={selected}
-          onSelectionChange={({ detail }) => { setSelected(detail.selectedItems); setSplitOpen(true); }}
-          stickyHeader
-          variant="full-page"
-          header={
-            <Box padding={{ bottom: 'xs' }}>
-              <Box color="text-body-secondary" fontSize="body-m">
-                AWS 공식 릴리스 노트를 한국어로 자동 번역·검수하여 보여줍니다.{' '}<span className="desc-break" />현재 {filtered.length}개의 새 소식이 있습니다.{latestDate ? ` 최근 업데이트: ${timeAgo(latestDate)}` : ''}
-              </Box>
-            </Box>
-          }
-          filter={<TextFilter filteringText={filter} filteringPlaceholder="키워드로 검색" onChange={({detail}) => { setFilter(detail.filteringText); setPage(1); }} />}
-          pagination={<Pagination currentPageIndex={page} pagesCount={Math.ceil(filtered.length/ps)||1} onChange={({detail}) => setPage(detail.currentPageIndex)} />}
-          columnDefinitions={[
-            {
-              id: 'pubDate', header: '날짜', width: 100,
-              cell: item => item.pubDate ? new Date(item.pubDate).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : '',
-              sortingField: 'pubDate',
-            },
-            {
-              id: 'status', header: '상태', width: 110,
-              cell: item => <StatusIndicator type={statusType(item.status)}>{fmtStatus(item.status)}</StatusIndicator>,
-            },
-            {
-              id: 'title', header: '제목',
-              cell: item => (
+    {isMobile ? (
+      <AppLayout navigationHide toolsHide
+        splitPanelOpen={splitOpen}
+        onSplitPanelToggle={({ detail }) => setSplitOpen(detail.open)}
+        splitPanel={splitPanel}
+        content={
+          <Cards loading={loading} loadingText="업데이트를 불러오는 중..."
+            items={paged}
+            selectionType="single"
+            selectedItems={selected}
+            onSelectionChange={({ detail }) => { setSelected(detail.selectedItems); setSplitOpen(true); }}
+            header={headerEl}
+            filter={filterEl}
+            pagination={paginationEl}
+            cardDefinition={{
+              header: item => <Box fontWeight="bold" fontSize="body-m">{item.title || item.titleEn}</Box>,
+              sections: [
+                { id: 'meta', content: item => (
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <StatusIndicator type={statusType(item.status)}>{fmtStatus(item.status)}</StatusIndicator>
+                    <Box color="text-body-secondary" fontSize="body-s">{fmtDate(item.pubDate)}</Box>
+                  </SpaceBetween>
+                )},
+              ],
+            }}
+            empty={emptyEl}
+          />
+        }
+      />
+    ) : (
+      <AppLayout navigationHide toolsHide
+        splitPanelOpen={splitOpen}
+        onSplitPanelToggle={({ detail }) => setSplitOpen(detail.open)}
+        splitPanelPreferences={{ position: 'side' }}
+        splitPanelSize={Math.round(window.innerWidth * 0.55)}
+        splitPanel={splitPanel}
+        content={
+          <Table loading={loading} loadingText="업데이트를 불러오는 중..."
+            items={paged}
+            selectionType="single"
+            selectedItems={selected}
+            onSelectionChange={({ detail }) => { setSelected(detail.selectedItems); setSplitOpen(true); }}
+            stickyHeader
+            variant="full-page"
+            header={headerEl}
+            filter={filterEl}
+            pagination={paginationEl}
+            columnDefinitions={[
+              { id: 'pubDate', header: '날짜', width: 100, cell: item => fmtDate(item.pubDate), sortingField: 'pubDate' },
+              { id: 'status', header: '상태', width: 110, cell: item => <StatusIndicator type={statusType(item.status)}>{fmtStatus(item.status)}</StatusIndicator> },
+              { id: 'title', header: '제목', cell: item => (
                 <Box>
                   <Box>{item.title || item.titleEn}</Box>
                   {fmtSummary(item.summary) && <Box color="text-body-secondary" fontSize="body-s">{fmtSummary(item.summary).length > 80 ? fmtSummary(item.summary).slice(0, 80) + '…' : fmtSummary(item.summary)}</Box>}
                 </Box>
-              ),
-              sortingField: 'title',
-            },
-          ]}
-          empty={<Box textAlign="center" padding="l">{API_URL ? '표시할 업데이트가 없습니다.' : 'API URL이 설정되지 않았습니다.'}</Box>}
-        />
-      }
-    />
+              ), sortingField: 'title' },
+            ]}
+            empty={emptyEl}
+          />
+        }
+      />
+    )}
     <Box textAlign="center" padding="l" color="text-body-secondary" fontSize="body-s">
       © {new Date().getFullYear()} AWS What's New 한국어 요약. This is not an official AWS product or project.
     </Box>

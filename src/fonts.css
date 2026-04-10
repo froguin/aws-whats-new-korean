@@ -16,18 +16,10 @@ body {
 
 /* 모바일 레이아웃 */
 @media (max-width: 768px) {
-  /* Split Panel 리사이즈 바 숨김 (모바일만) */
   [class*="awsui_slider"] {
     display: none !important;
   }
-  /* GitHub 링크 숨김 (TopNavigation 두 번째 유틸리티) */
   [class*="awsui_utility-wrapper"]:last-child {
     display: none !important;
   }
-  .desc-break {
-    display: block;
-  }
-}
-.desc-break {
-  display: none;
 }
