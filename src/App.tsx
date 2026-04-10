@@ -141,7 +141,12 @@ export default function App() {
             },
             {
               id: 'title', header: '제목',
-              cell: item => item.title || item.titleEn,
+              cell: item => (
+                <Box>
+                  <Box>{item.title || item.titleEn}</Box>
+                  {fmtSummary(item.summary) && <Box color="text-body-secondary" fontSize="body-s">{fmtSummary(item.summary).length > 80 ? fmtSummary(item.summary).slice(0, 80) + '…' : fmtSummary(item.summary)}</Box>}
+                </Box>
+              ),
               sortingField: 'title',
             },
           ]}
