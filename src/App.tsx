@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  AppLayout, Header, Table, Box, SplitPanel,
+  AppLayout, Table, Box, SplitPanel,
   SpaceBetween, Link, TextFilter, Pagination, StatusIndicator,
   TopNavigation,
 } from '@cloudscape-design/components';
@@ -47,7 +47,7 @@ export default function App() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Article[]>([]);
   const [splitOpen, setSplitOpen] = useState(false);
-  const ps = 20;
+  const ps = 30;
   const [dark, setDark] = useState(() => {
     const s = localStorage.getItem('theme');
     return s ? s === 'dark' : matchMedia('(prefers-color-scheme:dark)').matches;
@@ -85,17 +85,21 @@ export default function App() {
       splitPanelOpen={splitOpen}
       onSplitPanelToggle={({ detail }) => setSplitOpen(detail.open)}
       splitPanelPreferences={{ position: 'side' }}
+      splitPanelSize={450}
       splitPanel={
         detail ? (
-          <SplitPanel header={detail.title || detail.titleEn} closeBehavior="hide">
+          <SplitPanel header={detail.title || detail.titleEn} hidePreferencesButton closeBehavior="hide"
+            i18nStrings={{ preferencesTitle: '', preferencesPositionLabel: '', preferencesPositionDescription: '', preferencesPositionSide: '', preferencesPositionBottom: '', preferencesConfirm: '', preferencesCancel: '', closeButtonAriaLabel: '닫기', openButtonAriaLabel: '열기', resizeHandleAriaLabel: '' }}>
             <SpaceBetween size="m">
               {detail.titleEn && detail.title !== detail.titleEn && (
                 <Box color="text-body-secondary" fontSize="body-s">{detail.titleEn}</Box>
               )}
-              <Box>
-                <Box variant="awsui-key-label">상태</Box>
+              <SpaceBetween direction="horizontal" size="xs">
                 <StatusIndicator type={statusType(detail.status)}>{fmtStatus(detail.status)}</StatusIndicator>
-              </Box>
+                <Box color="text-body-secondary" fontSize="body-s">
+                  {detail.pubDate ? new Date(detail.pubDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
+                </Box>
+              </SpaceBetween>
               <Box>
                 <Box variant="awsui-key-label">요약</Box>
                 <Box>{fmtSummary(detail.summary) || '요약 없음'}</Box>
@@ -113,9 +117,9 @@ export default function App() {
           loading={loading}
           loadingText="업데이트를 불러오는 중..."
           items={paged}
-          selectionType="single"
-          selectedItems={selected}
-          onSelectionChange={({ detail }) => { setSelected(detail.selectedItems); setSplitOpen(true); }}
+          onRowClick={({ detail }) => { setSelected([detail.item]); setSplitOpen(true); }}
+          stickyHeader
+          variant="full-page"
           header={
             <Box padding={{ bottom: 'xs' }}>
               <Box color="text-body-secondary" fontSize="body-m">
@@ -127,25 +131,18 @@ export default function App() {
           pagination={<Pagination currentPageIndex={page} pagesCount={Math.ceil(filtered.length/ps)||1} onChange={({detail}) => setPage(detail.currentPageIndex)} />}
           columnDefinitions={[
             {
-              id: 'title', header: '제목', width: 400,
-              cell: item => <Link href={item.url} external>{item.title || item.titleEn}</Link>,
-              sortingField: 'title',
+              id: 'pubDate', header: '날짜', width: 100,
+              cell: item => item.pubDate ? new Date(item.pubDate).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : '',
+              sortingField: 'pubDate',
             },
             {
-              id: 'status', header: '상태', width: 120,
+              id: 'status', header: '상태', width: 110,
               cell: item => <StatusIndicator type={statusType(item.status)}>{fmtStatus(item.status)}</StatusIndicator>,
             },
             {
-              id: 'summary', header: '요약', width: 350,
-              cell: item => {
-                const s = fmtSummary(item.summary);
-                return s.length > 60 ? s.slice(0, 60) + '…' : s;
-              },
-            },
-            {
-              id: 'pubDate', header: '날짜', width: 120,
-              cell: item => item.pubDate ? new Date(item.pubDate).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : '',
-              sortingField: 'pubDate',
+              id: 'title', header: '제목',
+              cell: item => item.title || item.titleEn,
+              sortingField: 'title',
             },
           ]}
           empty={<Box textAlign="center" padding="l">{API_URL ? '표시할 업데이트가 없습니다.' : 'API URL이 설정되지 않았습니다.'}</Box>}

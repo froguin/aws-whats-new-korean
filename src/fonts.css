@@ -41,6 +41,11 @@ body {
     display: block;
   }
 }
+/* Split Panel 리사이즈 바 숨김 */
+[class*="awsui_slider"] {
+  display: none !important;
+}
+
 .desc-break {
   display: none;
 }
