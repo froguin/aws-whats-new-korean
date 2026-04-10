@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  AppLayout, Header, Cards, Box,
+  AppLayout, Header, Table, Box, SplitPanel,
   SpaceBetween, Link, TextFilter, Pagination, StatusIndicator,
   TopNavigation,
 } from '@cloudscape-design/components';
@@ -45,7 +45,9 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [page, setPage] = useState(1);
-  const ps = 12;
+  const [selected, setSelected] = useState<Article[]>([]);
+  const [splitOpen, setSplitOpen] = useState(false);
+  const ps = 20;
   const [dark, setDark] = useState(() => {
     const s = localStorage.getItem('theme');
     return s ? s === 'dark' : matchMedia('(prefers-color-scheme:dark)').matches;
@@ -64,6 +66,7 @@ export default function App() {
   });
   const paged = filtered.slice((page-1)*ps, page*ps);
   const latestDate = items[0]?.pubDate;
+  const detail = selected[0];
 
   return <>
     <TopNavigation
@@ -76,41 +79,79 @@ export default function App() {
         { type: 'button', text: 'GitHub', href: 'https://github.com/froguin/aws-whats-new-korean', external: true },
       ]}
     />
-    <AppLayout navigationHide toolsHide content={
-      <Cards loading={loading} loadingText="업데이트를 불러오는 중..."
-        items={paged}
-        header={
-          <Box padding={{ bottom: 'xs' }}>
-            <Box color="text-body-secondary" fontSize="body-m">
-              AWS 공식 릴리스 노트를 한국어로 자동 번역·검수하여 보여줍니다. 현재 {filtered.length}개의 새 소식이 있습니다.{latestDate ? ` 최근 업데이트: ${timeAgo(latestDate)}` : ''}
+    <AppLayout
+      navigationHide
+      toolsHide
+      splitPanelOpen={splitOpen}
+      onSplitPanelToggle={({ detail }) => setSplitOpen(detail.open)}
+      splitPanelPreferences={{ position: 'side' }}
+      splitPanel={
+        detail ? (
+          <SplitPanel header={detail.title || detail.titleEn} closeBehavior="hide">
+            <SpaceBetween size="m">
+              {detail.titleEn && detail.title !== detail.titleEn && (
+                <Box color="text-body-secondary" fontSize="body-s">{detail.titleEn}</Box>
+              )}
+              <Box>
+                <Box variant="awsui-key-label">상태</Box>
+                <StatusIndicator type={statusType(detail.status)}>{fmtStatus(detail.status)}</StatusIndicator>
+              </Box>
+              <Box>
+                <Box variant="awsui-key-label">요약</Box>
+                <Box>{fmtSummary(detail.summary) || '요약 없음'}</Box>
+              </Box>
+              {detail.target && <Box><Box variant="awsui-key-label">대상</Box><Box>{detail.target}</Box></Box>}
+              {detail.features && <Box><Box variant="awsui-key-label">주요 기능</Box><Box>{detail.features}</Box></Box>}
+              {detail.regions && <Box><Box variant="awsui-key-label">리전</Box><Box>{detail.regions}</Box></Box>}
+              <Link href={detail.url} external>원문 보기</Link>
+            </SpaceBetween>
+          </SplitPanel>
+        ) : null
+      }
+      content={
+        <Table
+          loading={loading}
+          loadingText="업데이트를 불러오는 중..."
+          items={paged}
+          selectionType="single"
+          selectedItems={selected}
+          onSelectionChange={({ detail }) => { setSelected(detail.selectedItems); setSplitOpen(true); }}
+          header={
+            <Box padding={{ bottom: 'xs' }}>
+              <Box color="text-body-secondary" fontSize="body-m">
+                AWS 공식 릴리스 노트를 한국어로 자동 번역·검수하여 보여줍니다. 현재 {filtered.length}개의 새 소식이 있습니다.{latestDate ? ` 최근 업데이트: ${timeAgo(latestDate)}` : ''}
+              </Box>
             </Box>
-          </Box>
-        }
-        filter={<TextFilter filteringText={filter} filteringPlaceholder="키워드로 검색" onChange={({detail}) => { setFilter(detail.filteringText); setPage(1); }} />}
-        pagination={<Pagination currentPageIndex={page} pagesCount={Math.ceil(filtered.length/ps)||1} onChange={({detail}) => setPage(detail.currentPageIndex)} />}
-        cardDefinition={{
-          header: item => <Link href={item.url} external fontSize="heading-m">{item.title || item.titleEn}</Link>,
-          sections: [
-            { id: 'meta', header: '상태', content: item => (
-              <SpaceBetween direction="horizontal" size="xs">
-                <StatusIndicator type={statusType(item.status)}>{fmtStatus(item.status)}</StatusIndicator>
-                <Box color="text-body-secondary" fontSize="body-s">
-                  {item.pubDate ? new Date(item.pubDate).toLocaleDateString('ko-KR',{year:'numeric',month:'short',day:'numeric'}) : ''}
-                </Box>
-              </SpaceBetween>
-            )},
-            { id: 'summary', header: '요약', content: item => {
-              const s = fmtSummary(item.summary);
-              return s ? <Box>{s}</Box> : null;
-            }},
-            { id: 'target', header: '대상', content: item => item.target ? <Box color="text-body-secondary" fontSize="body-s">{item.target}</Box> : null },
-            { id: 'features', header: '주요 기능', content: item => item.features ? <Box color="text-body-secondary" fontSize="body-s">{item.features}</Box> : null },
-            { id: 'regions', header: '리전', content: item => item.regions ? <Box color="text-body-secondary" fontSize="body-s">{item.regions}</Box> : null },
-          ],
-        }}
-        empty={<Box textAlign="center" padding="l">{API_URL ? '표시할 업데이트가 없습니다.' : 'API URL이 설정되지 않았습니다.'}</Box>}
-      />
-    } />
+          }
+          filter={<TextFilter filteringText={filter} filteringPlaceholder="키워드로 검색" onChange={({detail}) => { setFilter(detail.filteringText); setPage(1); }} />}
+          pagination={<Pagination currentPageIndex={page} pagesCount={Math.ceil(filtered.length/ps)||1} onChange={({detail}) => setPage(detail.currentPageIndex)} />}
+          columnDefinitions={[
+            {
+              id: 'title', header: '제목', width: 400,
+              cell: item => <Link href={item.url} external>{item.title || item.titleEn}</Link>,
+              sortingField: 'title',
+            },
+            {
+              id: 'status', header: '상태', width: 120,
+              cell: item => <StatusIndicator type={statusType(item.status)}>{fmtStatus(item.status)}</StatusIndicator>,
+            },
+            {
+              id: 'summary', header: '요약', width: 350,
+              cell: item => {
+                const s = fmtSummary(item.summary);
+                return s.length > 60 ? s.slice(0, 60) + '…' : s;
+              },
+            },
+            {
+              id: 'pubDate', header: '날짜', width: 120,
+              cell: item => item.pubDate ? new Date(item.pubDate).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : '',
+              sortingField: 'pubDate',
+            },
+          ]}
+          empty={<Box textAlign="center" padding="l">{API_URL ? '표시할 업데이트가 없습니다.' : 'API URL이 설정되지 않았습니다.'}</Box>}
+        />
+      }
+    />
     <Box textAlign="center" padding="l" color="text-body-secondary" fontSize="body-s">
       © {new Date().getFullYear()} AWS What's New 한국어 요약. This is not an official AWS product or project.
     </Box>
