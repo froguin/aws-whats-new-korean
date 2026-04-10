@@ -13,3 +13,10 @@ body {
   font-family: "Amazon Ember", "Noto Sans KR", sans-serif;
 }
 
+
+/* 모바일에서 TopNavigation 오버플로 메뉴 버튼 숨김 */
+@media (max-width: 768px) {
+  [class*="awsui_overflow-menu-trigger"] {
+    display: none !important;
+  }
+}
