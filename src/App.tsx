@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AppLayout, Table, Box, SplitPanel, TokenGroup, Alert,
+  AppLayout, Table, Cards, Box, SplitPanel, TokenGroup, Alert,
   SpaceBetween, Link, TextFilter, Pagination, StatusIndicator,
   TopNavigation, Button, Header,
 } from '@cloudscape-design/components';
@@ -85,12 +85,14 @@ export default function App() {
   const [selectedItems, setSelectedItems] = useState<Article[]>([]);
   const [splitOpen, setSplitOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sortingColumn, setSortingColumn] = useState<{ sortingField: string }>({ sortingField: 'pubDate' });
+  const [sortingDescending, setSortingDescending] = useState(true);
   const isMobile = useIsMobile();
   const pageSize = isMobile ? 15 : 30;
 
   const [dark, setDark] = useState(() => {
-    const s = localStorage.getItem('theme');
-    return s ? s === 'dark' : matchMedia('(prefers-color-scheme:dark)').matches;
+    const saved = localStorage.getItem('theme');
+    return saved ? saved === 'dark' : matchMedia('(prefers-color-scheme:dark)').matches;
   });
 
   useEffect(() => {
@@ -98,11 +100,14 @@ export default function App() {
     localStorage.setItem('theme', dark ? 'dark' : 'light');
   }, [dark]);
 
-  // OS 다크모드 변경 실시간 반영
+  // OS 다크모드 변경 반영 (사용자가 수동 설정 안 한 경우만)
   useEffect(() => {
     const mql = matchMedia('(prefers-color-scheme: dark)');
     const h = (e: MediaQueryListEvent) => {
-      if (!localStorage.getItem('theme')) setDark(e.matches);
+      const saved = localStorage.getItem('theme');
+      // 사용자가 토글을 한 번도 안 눌렀으면 saved가 OS 기본값과 같음
+      // OS 변경 시 항상 따라감 (사용자가 원하면 토글로 다시 변경)
+      setDark(e.matches);
     };
     mql.addEventListener('change', h);
     return () => mql.removeEventListener('change', h);
@@ -132,7 +137,6 @@ export default function App() {
     return () => controller.abort();
   }, [fetchArticles]);
 
-  // 동적 document.title
   useEffect(() => {
     document.title = selectedItems[0]
       ? `${selectedItems[0].title} — AWS 새소식 한국어`
@@ -140,17 +144,28 @@ export default function App() {
   }, [selectedItems]);
 
   const filtered = useMemo(() => {
-    if (!filterText) return items;
-    const q = filterText.toLowerCase();
-    return items.filter(a =>
-      (a.title || '').toLowerCase().includes(q) ||
-      (a.titleEn || '').toLowerCase().includes(q) ||
-      getSummary(a.summary).toLowerCase().includes(q)
-    );
-  }, [items, filterText]);
+    let result = items;
+    if (filterText) {
+      const q = filterText.toLowerCase();
+      result = result.filter(a =>
+        (a.title || '').toLowerCase().includes(q) ||
+        (a.titleEn || '').toLowerCase().includes(q) ||
+        getSummary(a.summary).toLowerCase().includes(q)
+      );
+    }
+    // 정렬
+    const field = sortingColumn.sortingField as keyof Article;
+    result = [...result].sort((a, b) => {
+      const va = (a[field] || '') as string;
+      const vb = (b[field] || '') as string;
+      return sortingDescending ? vb.localeCompare(va) : va.localeCompare(vb);
+    });
+    return result;
+  }, [items, filterText, sortingColumn, sortingDescending]);
 
   const paged = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page, pageSize]);
   const detail = selectedItems[0];
+  const detailRegions = useMemo(() => detail ? parseRegions(detail.regions) : [], [detail]);
   const latestDate = items[0]?.pubDate;
 
   const selectItem = (item: Article) => { setSelectedItems([item]); setSplitOpen(true); };
@@ -170,7 +185,6 @@ export default function App() {
     closeButtonAriaLabel: '상세 패널 닫기', openButtonAriaLabel: '상세 패널 열기',
     resizeHandleAriaLabel: '상세 패널 크기 조절',
   };
-
   const paginationAriaLabels = { nextPageLabel: '다음 페이지', previousPageLabel: '이전 페이지', pageLabel: (p: number) => `${p}페이지` };
 
   const splitPanel = detail ? (
@@ -186,8 +200,8 @@ export default function App() {
         <Box><Box variant="awsui-key-label">요약</Box><Box>{getSummary(detail.summary) || '요약 정보를 준비 중입니다.'}</Box></Box>
         {detail.target && <Box><Box variant="awsui-key-label">대상</Box><Box>{detail.target}</Box></Box>}
         {detail.features && <Box><Box variant="awsui-key-label">주요 기능</Box><Box>{detail.features}</Box></Box>}
-        {parseRegions(detail.regions).length > 0 && (
-          <Box><Box variant="awsui-key-label">리전</Box><TokenGroup items={parseRegions(detail.regions)} readOnly /></Box>
+        {detailRegions.length > 0 && (
+          <Box><Box variant="awsui-key-label">리전</Box><TokenGroup items={detailRegions} readOnly /></Box>
         )}
         <SpaceBetween direction="horizontal" size="xs">
           <Link href={detail.url} external>AWS 원문 보기</Link>
@@ -229,67 +243,70 @@ export default function App() {
       onChange={({ detail }) => setPage(detail.currentPageIndex)} ariaLabels={paginationAriaLabels} />
   );
 
-  const mobileList = (
-    <SpaceBetween size="s">
-      <Box padding={{ bottom: 'xs' }}>
-        <Box color="text-body-secondary" fontSize="body-m">
-          AWS 공식 릴리스 노트를 한국어로 자동 번역·요약하여 제공합니다.<br />{descText}
-        </Box>
-      </Box>
-      {filterEl}
-      {loading ? (
-        <Box textAlign="center" padding="l">업데이트를 불러오는 중...</Box>
-      ) : error ? emptyContent : paged.length === 0 ? emptyContent : (
-        <div role="list" aria-label="릴리스 노트 목록">
-          {paged.map(item => (
-            <div key={item.id} role="button" tabIndex={0} aria-current={detail?.id === item.id ? 'true' : undefined}
-              onClick={() => selectItem(item)}
-              onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && selectItem(item)}
-              style={{
-                padding: '12px 16px', cursor: 'pointer', userSelect: 'none',
-                borderBottom: '1px solid var(--color-border-divider-default, #e9ebed)',
-                borderLeft: detail?.id === item.id ? '3px solid var(--color-border-item-focused, #0972d3)' : '3px solid transparent',
-                backgroundColor: detail?.id === item.id ? 'var(--color-background-item-selected, #f2f8fd)' : 'transparent',
-                transition: 'background-color 0.15s',
-              }}>
-              <SpaceBetween size="xxs">
-                <Box fontWeight="bold">{item.title || item.titleEn}</Box>
-                <SpaceBetween direction="horizontal" size="xs">
-                  <StatusIndicator type={getStatusType(item.status)}>{getStatusLabel(item.status)}</StatusIndicator>
-                  <Box color="text-body-secondary" fontSize="body-s">{formatDate(item.pubDate)}</Box>
-                </SpaceBetween>
-              </SpaceBetween>
-            </div>
-          ))}
-        </div>
-      )}
-      {paginationEl}
-    </SpaceBetween>
+  const onSelectionChange = ({ detail: d }: any) => {
+    setSelectedItems(d.selectedItems);
+    setSplitOpen(d.selectedItems.length > 0);
+  };
+
+  const headerDesc = (
+    <Box color="text-body-secondary" fontSize="body-m">
+      AWS 공식 릴리스 노트를 한국어로 자동 번역·요약하여 제공합니다.{isMobile ? <br /> : ' '}{descText}
+    </Box>
   );
+
+  const mobileCards = (
+    <Cards
+      loading={loading} loadingText="업데이트를 불러오는 중..."
+      items={paged}
+      selectionType="single"
+      selectedItems={selectedItems}
+      onSelectionChange={onSelectionChange}
+      trackBy="id"
+      header={<Box padding={{ bottom: 'xs' }}>{headerDesc}</Box>}
+      filter={filterEl}
+      pagination={paginationEl}
+      ariaLabels={{ itemSelectionLabel: (_d, item) => (item as Article).title, selectionGroupLabel: '기사 선택' }}
+      cardDefinition={{
+        header: item => <Box fontWeight="bold">{item.title || item.titleEn}</Box>,
+        sections: [
+          { id: 'meta', content: item => (
+            <SpaceBetween direction="horizontal" size="xs">
+              <StatusIndicator type={getStatusType(item.status)}>{getStatusLabel(item.status)}</StatusIndicator>
+              <Box color="text-body-secondary" fontSize="body-s">{formatDate(item.pubDate)}</Box>
+            </SpaceBetween>
+          )},
+        ],
+      }}
+      empty={emptyContent}
+    />
+  );
+
+  const columnDefs = useMemo(() => [
+    { id: 'pubDate', header: '날짜', width: 120, cell: (item: Article) => formatDate(item.pubDate), sortingField: 'pubDate' },
+    { id: 'status', header: '상태', width: 110, cell: (item: Article) => <StatusIndicator type={getStatusType(item.status)}>{getStatusLabel(item.status)}</StatusIndicator> },
+    { id: 'title', header: '제목', cell: (item: Article) => item.title || item.titleEn, sortingField: 'title' },
+  ], []);
 
   const desktopTable = (
     <Table
       loading={loading} loadingText="업데이트를 불러오는 중..."
       items={paged} trackBy="id"
       selectionType="single" selectedItems={selectedItems}
-      onSelectionChange={({ detail }) => { setSelectedItems(detail.selectedItems); setSplitOpen(detail.selectedItems.length > 0); }}
+      onSelectionChange={onSelectionChange}
       onRowClick={({ detail: d }) => selectItem(d.item)}
+      sortingColumn={sortingColumn}
+      sortingDescending={sortingDescending}
+      onSortingChange={({ detail }) => { setSortingColumn(detail.sortingColumn as any); setSortingDescending(detail.isDescending ?? false); setPage(1); }}
       stickyHeader stripedRows variant="full-page"
       ariaLabels={{ itemSelectionLabel: (_d, item) => (item as Article).title, selectionGroupLabel: '기사 선택', tableLabel: 'AWS 릴리스 노트 목록' }}
       header={
-        <Header counter={`(${filtered.length})`}>
-          <Box color="text-body-secondary" fontSize="body-m">
-            AWS 공식 릴리스 노트를 한국어로 자동 번역·요약하여 제공합니다. {descText}
-          </Box>
+        <Header counter={`(${filtered.length})`} description={headerDesc}>
+          릴리스 노트
         </Header>
       }
       filter={filterEl}
       pagination={paginationEl}
-      columnDefinitions={[
-        { id: 'pubDate', header: '날짜', width: 120, cell: item => formatDate(item.pubDate), sortingField: 'pubDate' },
-        { id: 'status', header: '상태', width: 110, cell: item => <StatusIndicator type={getStatusType(item.status)}>{getStatusLabel(item.status)}</StatusIndicator> },
-        { id: 'title', header: '제목', cell: item => item.title || item.titleEn, sortingField: 'title' },
-      ]}
+      columnDefinitions={columnDefs}
       empty={emptyContent}
     />
   );
@@ -319,9 +336,8 @@ export default function App() {
       splitPanelOpen={splitOpen}
       onSplitPanelToggle={({ detail }) => setSplitOpen(detail.open)}
       splitPanelPreferences={{ position: isMobile ? 'bottom' : 'side' }}
-      splitPanelSize={isMobile ? undefined : Math.round(window.innerWidth * 0.5)}
       splitPanel={splitPanel}
-      content={isMobile ? mobileList : desktopTable}
+      content={isMobile ? mobileCards : desktopTable}
     />
     <Box textAlign="center" padding="s" color="text-body-secondary" fontSize="body-s">
       © {new Date().getFullYear()} AWS What's New 한국어 요약 · 비공식 프로젝트이며 AWS와 무관합니다. AI 자동 번역 결과가 포함되어 있습니다.
