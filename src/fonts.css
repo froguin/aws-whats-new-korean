@@ -19,7 +19,4 @@ body {
   [class*="awsui_slider"] {
     display: none !important;
   }
-  [class*="awsui_utility-wrapper"]:last-child {
-    display: none !important;
-  }
 }
