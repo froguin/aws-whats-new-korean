@@ -165,7 +165,7 @@ export default function App() {
             selectionType="single"
             selectedItems={selected}
             onSelectionChange={({ detail }) => { setSelected(detail.selectedItems); setSplitOpen(true); }}
-            stickyHeader
+            onRowClick={({ detail }) => { setSelected([detail.item]); setSplitOpen(true); }}            stickyHeader
             variant="full-page"
             header={headerEl}
             filter={filterEl}
