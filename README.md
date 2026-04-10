@@ -1,6 +1,6 @@
 # AWS What's New 한국어 요약
 
-[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://d27cqsuosbietu.amplifyapp.com)
+[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://main.d27cqsuosbietu.amplifyapp.com)
 
 AWS 공식 [What's New](https://aws.amazon.com/new/) 릴리스 노트를 Amazon Bedrock으로 자동 번역·검수하여 한국어로 보여주는 서버리스 애플리케이션입니다.
 
