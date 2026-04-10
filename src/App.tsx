@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  AppLayout, Table, Cards, Box, SplitPanel,
+  AppLayout, Table, Box, SplitPanel, TokenGroup,
   SpaceBetween, Link, TextFilter, Pagination, StatusIndicator,
   TopNavigation, Button,
 } from '@cloudscape-design/components';
@@ -128,7 +128,7 @@ export default function App() {
         <Box><Box variant="awsui-key-label">요약</Box><Box>{fmtSummary(detail.summary) || '요약 정보를 준비 중입니다.'}</Box></Box>
         {detail.target && <Box><Box variant="awsui-key-label">대상</Box><Box>{detail.target}</Box></Box>}
         {detail.features && <Box><Box variant="awsui-key-label">주요 기능</Box><Box>{detail.features}</Box></Box>}
-        {detail.regions && <Box><Box variant="awsui-key-label">리전</Box><Box>{detail.regions}</Box></Box>}
+        {detail.regions && <Box><Box variant="awsui-key-label">리전</Box><TokenGroup items={detail.regions.split(',').map(r => ({ label: r.trim(), dismissLabel: '' }))} readOnly /></Box>}
         <Link href={detail.url} external>AWS 원문 보기</Link>
       </SpaceBetween>
     </SplitPanel>
@@ -146,30 +146,42 @@ export default function App() {
     setSplitOpen(d.selectedItems.length > 0);
   };
 
-  const content = isMobile ? (
-    <Cards loading={loading} loadingText="업데이트를 불러오는 중..."
-      items={paged}
-      selectionType="single"
-      selectedItems={selected}
-      onSelectionChange={onSelect}
-      header={headerEl}
-      filter={filterEl}
-      pagination={paginationEl}
-      ariaLabels={{ itemSelectionLabel: (_d, item) => (item as Article).title, selectionGroupLabel: '기사 선택' }}
-      cardDefinition={{
-        header: item => <Box fontWeight="bold" fontSize="body-m">{item.title || item.titleEn}</Box>,
-        sections: [
-          { id: 'meta', content: item => (
-            <SpaceBetween direction="horizontal" size="xs">
-              <StatusIndicator type={statusType(item.status)}>{fmtStatus(item.status)}</StatusIndicator>
-              <Box color="text-body-secondary" fontSize="body-s">{fmtDate(item.pubDate)}</Box>
-            </SpaceBetween>
-          )},
-        ],
-      }}
-      empty={emptyEl}
-    />
-  ) : (
+  const selectItem = (item: Article) => {
+    setSelected([item]);
+    setSplitOpen(true);
+  };
+
+  const mobileList = (
+    <SpaceBetween size="xs">
+      {headerEl}
+      {filterEl}
+      {loading ? <Box textAlign="center" padding="l">업데이트를 불러오는 중...</Box> : paged.length === 0 ? emptyEl : (
+        <div role="listbox" aria-label="릴리스 노트 목록">
+          {paged.map(item => (
+            <div key={item.id} role="option" tabIndex={0} aria-selected={detail?.id === item.id}
+              onClick={() => selectItem(item)} onKeyDown={e => e.key === 'Enter' && selectItem(item)}
+              style={{
+                padding: '12px 16px', cursor: 'pointer', userSelect: 'none',
+                borderBottom: '1px solid var(--color-border-divider-default, #e9ebed)',
+                borderLeft: detail?.id === item.id ? '3px solid var(--color-border-item-focused, #0972d3)' : '3px solid transparent',
+                backgroundColor: detail?.id === item.id ? 'var(--color-background-item-selected, #f0f4ff)' : 'transparent',
+              }}>
+              <SpaceBetween size="xxs">
+                <Box fontWeight="bold" fontSize="body-m">{item.title || item.titleEn}</Box>
+                <SpaceBetween direction="horizontal" size="xs">
+                  <StatusIndicator type={statusType(item.status)}>{fmtStatus(item.status)}</StatusIndicator>
+                  <Box color="text-body-secondary" fontSize="body-s">{fmtDate(item.pubDate)}</Box>
+                </SpaceBetween>
+              </SpaceBetween>
+            </div>
+          ))}
+        </div>
+      )}
+      {paginationEl}
+    </SpaceBetween>
+  );
+
+  const content = isMobile ? mobileList : (
     <Table loading={loading} loadingText="업데이트를 불러오는 중..."
       items={paged}
       selectionType="single"
@@ -185,12 +197,7 @@ export default function App() {
       columnDefinitions={[
         { id: 'pubDate', header: '날짜', width: 120, cell: item => fmtDate(item.pubDate), sortingField: 'pubDate' },
         { id: 'status', header: '상태', width: 110, cell: item => <StatusIndicator type={statusType(item.status)}>{fmtStatus(item.status)}</StatusIndicator> },
-        { id: 'title', header: '제목', cell: item => (
-          <Box>
-            <Box>{item.title || item.titleEn}</Box>
-            {fmtSummary(item.summary) && <Box color="text-body-secondary" fontSize="body-s">{fmtSummary(item.summary).length > 80 ? fmtSummary(item.summary).slice(0, 80) + '…' : fmtSummary(item.summary)}</Box>}
-          </Box>
-        ), sortingField: 'title' },
+        { id: 'title', header: '제목', cell: item => item.title || item.titleEn, sortingField: 'title' },
       ]}
       empty={emptyEl}
     />
