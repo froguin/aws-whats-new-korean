@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AppLayout, Table, Cards, Box, SplitPanel, TokenGroup, Alert,
+  AppLayout, Table, Cards, Box, SplitPanel, Alert,
   SpaceBetween, Link, TextFilter, Pagination, StatusIndicator,
   TopNavigation, Button, Header,
 } from '@cloudscape-design/components';
@@ -201,7 +201,7 @@ export default function App() {
         {detail.target && <Box><Box variant="awsui-key-label">대상</Box><Box>{detail.target}</Box></Box>}
         {detail.features && <Box><Box variant="awsui-key-label">주요 기능</Box><Box>{detail.features}</Box></Box>}
         {detailRegions.length > 0 && (
-          <Box><Box variant="awsui-key-label">리전</Box><TokenGroup items={detailRegions} readOnly /></Box>
+          <Box><Box variant="awsui-key-label">리전</Box><SpaceBetween direction="horizontal" size="xxs">{detailRegions.map(r => <Box key={r.label} display="inline-block" fontSize="body-s" color="text-body-secondary" padding={{ horizontal: 'xs' }} margin={{ right: 'xxs' }}><span style={{ background: 'var(--color-background-badge-icon, #e9ebed)', borderRadius: '4px', padding: '2px 8px' }}>{r.label}</span></Box>)}</SpaceBetween></Box>
         )}
         <SpaceBetween direction="horizontal" size="xs">
           <Link href={detail.url} external>AWS 원문 보기</Link>
