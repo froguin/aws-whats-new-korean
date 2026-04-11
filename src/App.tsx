@@ -289,9 +289,9 @@ export default function App() {
 
   // ── Unique values for PropertyFilter ──
   const filteringOptions = useMemo(() => {
-    const statuses = [...new Set(items.map(i => getStatusLabel(i.status)))];
-    const targets = [...new Set(items.map(i => i.target).filter(Boolean))];
-    const regions = [...new Set(items.flatMap(i => parseRegions(i.regions)))];
+    const statuses = [...new Set(items.map(i => getStatusLabel(i.status)))].sort();
+    const targets = [...new Set(items.map(i => i.target).filter(Boolean))].sort();
+    const regions = [...new Set(items.flatMap(i => parseRegions(i.regions)))].sort();
     return [
       ...statuses.map(v => ({ propertyKey: 'status', value: v })),
       ...targets.map(v => ({ propertyKey: 'target', value: v })),
