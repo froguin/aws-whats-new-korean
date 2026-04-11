@@ -50,7 +50,7 @@ Amplify Gen 2 (React SPA + CDK 백엔드)
 ## 사전 요구사항
 
 - AWS CLI v2
-- Node.js 20+
+- Node.js 22+
 - Bedrock 모델 접근 활성화 (Nova Lite, Nova Micro) — `ap-northeast-2` 리전
 
 ## 배포
