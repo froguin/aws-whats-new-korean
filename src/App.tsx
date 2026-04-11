@@ -4,7 +4,7 @@ import {
   SpaceBetween, Link, Pagination, StatusIndicator,
   TopNavigation, Button, Header, PropertyFilter, Badge,
   CollectionPreferences, ColumnLayout, KeyValuePairs, Flashbar,
-  Popover, Icon,
+  Popover, Icon, TextFilter,
 } from '@cloudscape-design/components';
 import { applyMode, Mode } from '@cloudscape-design/global-styles';
 
@@ -417,14 +417,12 @@ export default function App() {
       onSelectionChange={onSelectionChange} trackBy="id"
       header={headerEl}
       filter={
-        <Box>
-          <input
-            type="text" placeholder="제목, 서비스명으로 검색" value={filterText}
-            onChange={e => { setFilterText(e.target.value); setPage(1); }}
-            style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--color-border-input-default, #aab7b8)', borderRadius: '8px', background: 'var(--color-background-input-default, #fff)', color: 'var(--color-text-body-default, #16191f)', fontSize: '14px' }}
-            aria-label="업데이트 검색"
-          />
-        </Box>
+        <TextFilter
+          filteringText={filterText}
+          filteringPlaceholder="제목, 서비스명으로 검색"
+          filteringAriaLabel="업데이트 검색"
+          onChange={({ detail }) => { setFilterText(detail.filteringText); setPage(1); }}
+        />
       }
       pagination={paginationEl}
       ariaLabels={{ itemSelectionLabel: (_d, item) => (item as Article).title, selectionGroupLabel: '기사 선택' }}
