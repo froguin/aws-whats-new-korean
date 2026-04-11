@@ -174,7 +174,7 @@ export default function App() {
   const [query, setQuery] = useState<any>({ tokens: [], operation: 'and' });
   // CollectionPreferences state
   const [preferences, setPreferences] = useState({
-    pageSize: 25,
+    pageSize: 10,
     visibleContent: DEFAULT_VISIBLE,
     wrapLines: false,
     stripedRows: true,
