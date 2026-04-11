@@ -458,12 +458,14 @@ export default function App() {
       cardDefinition={{
         header: item => <div onClick={() => selectItem(item)} style={{ cursor: 'pointer' }}><Box fontWeight="bold">{item.title || item.titleEn}</Box></div>,
         sections: [
-          { id: 'titleEn', content: item => item.titleEn && item.title !== item.titleEn ? <Box fontSize="body-s" color="text-body-secondary">{item.titleEn}</Box> : null },
+          { id: 'titleEn', content: item => item.titleEn && item.title !== item.titleEn ? <div onClick={() => selectItem(item)} style={{ cursor: 'pointer' }}><Box fontSize="body-s" color="text-body-secondary">{item.titleEn}</Box></div> : null },
           { id: 'meta', content: item => (
-            <SpaceBetween direction="horizontal" size="xs">
-              <StatusIndicator type={getStatusType(item.status)}>{getStatusLabel(item.status)}</StatusIndicator>
-              <Box color="text-body-secondary" fontSize="body-s">{formatDate(item.pubDate)}</Box>
-            </SpaceBetween>
+            <div onClick={() => selectItem(item)} style={{ cursor: 'pointer' }}>
+              <SpaceBetween direction="horizontal" size="xs">
+                <StatusIndicator type={getStatusType(item.status)}>{getStatusLabel(item.status)}</StatusIndicator>
+                <Box color="text-body-secondary" fontSize="body-s">{formatDate(item.pubDate)}</Box>
+              </SpaceBetween>
+            </div>
           )},
         ],
       }}
