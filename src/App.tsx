@@ -248,11 +248,7 @@ export default function App() {
     setSplitOpen(d.selectedItems.length > 0);
   };
 
-  const headerDesc = (
-    <Box color="text-body-secondary" fontSize="body-m">
-      AWS 공식 릴리스 노트를 한국어로 자동 번역·요약하여 제공합니다.{isMobile ? <br /> : ' '}{descText}
-    </Box>
-  );
+  const headerDesc = `AWS 공식 릴리스 노트를 한국어로 자동 번역·요약하여 제공합니다. ${descText}`;
 
   const mobileCards = (
     <Cards
@@ -262,7 +258,7 @@ export default function App() {
       selectedItems={selectedItems}
       onSelectionChange={onSelectionChange}
       trackBy="id"
-      header={<Box padding={{ bottom: 'xs' }}>{headerDesc}</Box>}
+      header={<Header counter={`(${filtered.length})`} description={headerDesc}>릴리스 노트</Header>}
       filter={filterEl}
       pagination={paginationEl}
       ariaLabels={{ itemSelectionLabel: (_d, item) => (item as Article).title, selectionGroupLabel: '기사 선택' }}
@@ -337,6 +333,7 @@ export default function App() {
       splitPanelOpen={splitOpen}
       onSplitPanelToggle={({ detail }) => setSplitOpen(detail.open)}
       splitPanelPreferences={{ position: isMobile ? 'bottom' : 'side' }}
+      splitPanelSize={isMobile ? Math.round(window.innerHeight * 0.65) : undefined}
       splitPanel={splitPanel}
       content={isMobile ? mobileCards : desktopTable}
     />
