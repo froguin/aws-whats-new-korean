@@ -121,7 +121,7 @@ const COLUMN_DEFS = [
   },
   {
     id: 'target', header: '대상', width: 160,
-    cell: (item: Article) => item.target ? <Badge color="blue">{item.target}</Badge> : <Box>-</Box>,
+    cell: (item: Article) => item.target ? <Box fontSize="body-s">{item.target}</Box> : <Box>-</Box>,
   },
   {
     id: 'regions', header: '리전', width: 200,
@@ -150,7 +150,7 @@ const COLUMN_DEFS = [
   },
 ];
 
-const DEFAULT_VISIBLE = ['status', 'pubDate', 'title', 'target', 'regions'];
+const DEFAULT_VISIBLE = ['status', 'pubDate', 'title', 'regions'];
 const PAGE_SIZE_OPTIONS = [
   { value: 10, label: '10개' },
   { value: 25, label: '25개' },
@@ -327,7 +327,7 @@ export default function App() {
             items={[
               { label: '상태', value: <StatusIndicator type={getStatusType(detail.status)}>{getStatusLabel(detail.status)}</StatusIndicator> },
               { label: '날짜', value: <Box>{formatDate(detail.pubDate)} <Box display="inline-block" color="text-body-secondary" fontSize="body-s">({timeAgo(detail.pubDate)})</Box></Box> },
-              ...(detail.target ? [{ label: '대상', value: <Badge color="blue">{detail.target}</Badge> }] : []),
+              ...(detail.target ? [{ label: '대상', value: detail.target }] : []),
               ...(detailRegions.length > 0 ? [{ label: '리전', value: <Box fontSize="body-s">{detailRegions.join(', ')}</Box> }] : []),
             ]}
           />
