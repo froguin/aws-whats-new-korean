@@ -203,10 +203,7 @@ export default function App() {
         {detailRegions.length > 0 && (
           <Box><Box variant="awsui-key-label">리전</Box><SpaceBetween direction="horizontal" size="xxs">{detailRegions.map(r => <Box key={r.label} display="inline-block" fontSize="body-s" color="text-body-secondary" padding={{ horizontal: 'xs' }} margin={{ right: 'xxs' }}><span style={{ background: 'var(--color-background-badge-icon, #e9ebed)', borderRadius: '4px', padding: '2px 8px' }}>{r.label}</span></Box>)}</SpaceBetween></Box>
         )}
-        <SpaceBetween direction="horizontal" size="xs">
-          <Link href={detail.url} external>AWS 원문 보기</Link>
-          <Button iconName="copy" variant="inline-icon" onClick={copyUrl} ariaLabel="링크 복사">{copied ? '복사됨' : ''}</Button>
-        </SpaceBetween>
+        <Link href={detail.url} external>AWS 원문 보기</Link>
       </SpaceBetween>
     </SplitPanel>
   ) : (
