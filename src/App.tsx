@@ -267,7 +267,7 @@ export default function App() {
       pagination={paginationEl}
       ariaLabels={{ itemSelectionLabel: (_d, item) => (item as Article).title, selectionGroupLabel: '기사 선택' }}
       cardDefinition={{
-        header: item => <Box fontWeight="bold" onClick={() => selectItem(item)} style={{ cursor: 'pointer' }}>{item.title || item.titleEn}</Box>,
+        header: item => <div onClick={() => selectItem(item)} style={{ cursor: 'pointer' }}><Box fontWeight="bold">{item.title || item.titleEn}</Box></div>,
         sections: [
           { id: 'meta', content: item => (
             <SpaceBetween direction="horizontal" size="xs">
