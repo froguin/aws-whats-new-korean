@@ -409,6 +409,36 @@ export default function App() {
     [preferences.visibleContent]
   );
 
+  // ── Mobile detail (full screen) ──
+  const mobileDetail = detail ? (
+    <SpaceBetween size="l">
+      <Button iconName="arrow-left" variant="link" onClick={() => { setSelectedItems([]); }}>목록으로</Button>
+      <SpaceBetween size="m">
+        <Box variant="h2">{detail.title || detail.titleEn}</Box>
+        {detail.titleEn && detail.title !== detail.titleEn && (
+          <Box color="text-body-secondary" fontSize="body-s">{detail.titleEn}</Box>
+        )}
+        <SpaceBetween direction="horizontal" size="xs">
+          <StatusIndicator type={getStatusType(detail.status)}>{getStatusLabel(detail.status)}</StatusIndicator>
+          <Box color="text-body-secondary" fontSize="body-s">{formatDate(detail.pubDate)} ({timeAgo(detail.pubDate)})</Box>
+        </SpaceBetween>
+        {getWhatChanged(detail.summary) && (
+          <Box><Box variant="awsui-key-label">변경 사항</Box><Box>{getWhatChanged(detail.summary)}</Box></Box>
+        )}
+        {getWhyItMatters(detail.summary) && (
+          <Box><Box variant="awsui-key-label">중요한 이유</Box><Box>{getWhyItMatters(detail.summary)}</Box></Box>
+        )}
+        {!getWhatChanged(detail.summary) && !getWhyItMatters(detail.summary) && getSummary(detail.summary) && (
+          <Box><Box variant="awsui-key-label">요약</Box><Box>{getSummary(detail.summary)}</Box></Box>
+        )}
+        {detail.target && <Box><Box variant="awsui-key-label">대상</Box><Box>{detail.target}</Box></Box>}
+        {detail.features && <Box><Box variant="awsui-key-label">주요 기능</Box><Box>{detail.features}</Box></Box>}
+        {detailRegions.length > 0 && <Box><Box variant="awsui-key-label">리전</Box><Box fontSize="body-s">{detailRegions.join(', ')}</Box></Box>}
+        <Link href={detail.url} external>AWS 원문 보기</Link>
+      </SpaceBetween>
+    </SpaceBetween>
+  ) : null;
+
   // ── Mobile Cards ──
   const mobileCards = (
     <Cards
@@ -535,13 +565,12 @@ export default function App() {
     />
     <AppLayout
       navigationHide toolsHide
-      splitPanelOpen={splitOpen}
+      splitPanelOpen={!isMobile && splitOpen}
       onSplitPanelToggle={({ detail }) => setSplitOpen(detail.open)}
-      splitPanelPreferences={{ position: isMobile ? 'bottom' : 'bottom' }}
-      splitPanelSize={isMobile ? Math.round(window.innerHeight * 0.65) : undefined}
-      splitPanel={splitPanel}
+      splitPanelPreferences={{ position: 'bottom' }}
+      splitPanel={!isMobile ? splitPanel : undefined}
       notifications={<Flashbar items={flashItems} />}
-      content={isMobile ? mobileCards : desktopTable}
+      content={isMobile ? (detail ? mobileDetail : mobileCards) : desktopTable}
     />
     <Box textAlign="center" padding="s" color="text-body-secondary" fontSize="body-s">
       © {new Date().getFullYear()} AWS What's New 한국어 요약 · 비공식 프로젝트이며 AWS와 무관합니다. AI 자동 번역 결과가 포함되어 있습니다.
