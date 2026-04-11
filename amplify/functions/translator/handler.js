@@ -8,31 +8,49 @@ const REVIEW_MODEL = process.env.BEDROCK_REVIEW_MODEL;
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const bedrock = new BedrockRuntimeClient({});
 
-const RULES = `- Keep product names, versions, dates, region codes in English as-is
-- Translate ALL other English to Korean. Never mix (e.g. "및" not "and 및")
-- Title: product name + what changed, max 40 chars. Never just "출시" or "지원" alone
-- Summary: exactly 2 Korean sentences, max 150 chars. First: what changed. Second: why it matters
-- Status: "preview"→미리보기, "beta"→베타, "retired"→지원 종료, "GA"/"launched"→정식 출시
-- "beta"/"preview" in version strings is NOT a service status
-- Target: single sentence, max 50 chars
-- Features: comma-separated, max 3 items, max 80 chars total
-- Regions: AWS Korean region names or "모든 AWS 리전", max 60 chars`;
+const RULES = `<rules>
+- 제품명, 버전, 날짜, 리전 코드는 영어 유지
+- 그 외 모든 영어는 한국어로 번역. 혼용 금지 (예: "및" not "and 및")
+- AWS 표준 용어: instance→인스턴스, deploy→배포, serverless→서버리스
+- title: 제품명 + 변경 내용, 최대 40자. "출시" "지원"만 단독 사용 금지
+- summary: 한국어 2문장, 최대 150자. 첫째: 무엇이 변경. 둘째: 왜 중요
+- status: "preview"→미리보기, "beta"→베타, "retired"→지원 종료, "GA"/"launched"→정식 출시
+- 버전 문자열의 "beta"/"preview"는 서비스 상태가 아님
+- target: 한 문장, 최대 50자
+- features: 쉼표 구분, 최대 3개, 총 80자
+- regions: AWS 한국어 리전명 또는 "모든 AWS 리전", 최대 60자
+</rules>`;
 
-const SYS = `You are a Korean cloud news summarizer. OUTPUT: valid JSON only, no markdown, no code fences.\nRULES:\n${RULES}`;
-const REV = `Review Korean cloud news cards. Fix errors per rules:\n${RULES}\nOUTPUT corrected fields JSON only. If correct: {"pass":true}`;
+const SYS = `한국어 클라우드 뉴스 요약기. 출력: 유효한 JSON만. 마크다운/코드펜스 금지.\n${RULES}`;
+const REV = `한국어 클라우드 뉴스 카드 검수. 규칙 위반 수정:\n${RULES}\n<output>수정된 필드 JSON만. 정상이면: {"pass":true}</output>`;
 
 const FEW = [
-  { role: 'user', content: [{ text: 'Title: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13.' }] },
-  { role: 'assistant', content: [{ text: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원","summary":"Lambda 함수에서 Python 3.13의 주요 기능을 활용할 수 있게 되었습니다. 기존 Python 함수 운영 중이라면 업그레이드를 검토할 시점입니다.","target":"Python 기반 Lambda 개발자","features":"Python 3.13 런타임, 오류 메시지 개선, 성능 향상","regions":"모든 AWS 리전","status":["정식 출시"]}' }] },
+  { role: 'user', content: [{ text: '<article>\nTitle: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13.\n</article>' }] },
+  { role: 'assistant', content: [{ text: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원","summary":"Lambda 함수에서 Python 3.13을 사용할 수 있게 되었습니다. 기존 Python 함수 운영 중이라면 업그레이드를 검토할 시점입니다.","target":"Python 기반 Lambda 개발자","features":"Python 3.13 런타임, 오류 메시지 개선, 성능 향상","regions":"모든 AWS 리전","status":"정식 출시"}' }] },
 ];
 
 async function invoke(modelId, system, messages) {
   const r = await bedrock.send(new InvokeModelCommand({
     modelId, contentType: 'application/json', accept: 'application/json',
-    body: JSON.stringify({ schemaVersion: 'messages-v1', system: [{ text: system }], messages }),
+    body: JSON.stringify({ schemaVersion: 'messages-v1', system: [{ text: system }], messages, inferenceConfig: { temperature: 0 } }),
   }));
   let t = JSON.parse(new TextDecoder().decode(r.body)).output?.message?.content?.[0]?.text || '';
   return JSON.parse(t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim());
+}
+
+function validate(r) {
+  const errors = [];
+  if (!r.title || r.title.length < 5) errors.push('title_short');
+  if (r.title && r.title.length > 60) errors.push('title_long');
+  if (!r.summary || r.summary.length < 10) errors.push('summary_short');
+  if (r.summary && r.summary.length > 200) errors.push('summary_long');
+  if (!r.target) errors.push('target_missing');
+  if (!r.features) errors.push('features_missing');
+  if (!r.regions) errors.push('regions_missing');
+  const cjk = ((r.title || '') + (r.summary || '')).match(/[一-龥ぁ-ヿ]/g);
+  if (cjk && cjk.length >= 3) errors.push('cjk_contamination');
+  if (/[_*`#]/.test(r.summary || '')) errors.push('markdown_artifacts');
+  return errors;
 }
 
 function normalizeStatus(status) {
@@ -50,16 +68,35 @@ export const handler = async (event) => {
   for (const rec of event.Records) {
     const { guid, url, title, description } = JSON.parse(rec.body);
     try {
-      const msg = [...FEW, { role: 'user', content: [{ text: `Title: ${title}\nDescription: ${description}` }] }];
+      const userText = `<article>\nTitle: ${title}\nDescription: ${description}\n</article>`;
+      const msg = [...FEW, { role: 'user', content: [{ text: userText }] }];
+
+      // 1차 번역 (Nova Lite)
       let r = await invoke(TRANSLATE_MODEL, SYS, msg);
-      const valid = (o) => o.title?.length >= 5 && o.summary?.length >= 10 && o.target && o.features && o.regions;
-      if (!valid(r) || /[一-龥ぁ-ヿ]/.test(r.title + r.summary)) r = await invoke(TRANSLATE_MODEL, SYS, msg);
-      if (!valid(r)) r = await invoke(TRANSLATE_MODEL, SYS, msg);
-      try {
-        const rev = await invoke(REVIEW_MODEL, REV, [{ role: 'user', content: [{ text: `Original: ${title}\n\nTranslated:\n${JSON.stringify(r)}` }] }]);
-        if (!rev.pass) r = { ...r, ...rev, pass: undefined };
-      } catch {}
-      if (!valid(r)) throw new Error(`Incomplete translation: ${JSON.stringify({title:!!r.title,summary:!!r.summary,target:!!r.target,features:!!r.features,regions:!!r.regions})}`);
+      let errors = validate(r);
+
+      // 검증 실패 시 1회 재시도
+      if (errors.length > 0) {
+        console.log(`RETRY ${guid}: ${errors.join(',')}`);
+        r = await invoke(TRANSLATE_MODEL, SYS, msg);
+        errors = validate(r);
+      }
+
+      // 여전히 실패 시 검수 모델(Nova Micro)로 보정 시도
+      if (errors.length > 0) {
+        console.log(`REVIEW ${guid}: ${errors.join(',')}`);
+        try {
+          const rev = await invoke(REVIEW_MODEL, REV, [{ role: 'user', content: [{ text: `<original>\nTitle: ${title}\nDescription: ${description}\n</original>\n<translated>\n${JSON.stringify(r)}\n</translated>\n<errors>${errors.join(',')}</errors>` }] }]);
+          if (!rev.pass) r = { ...r, ...rev, pass: undefined };
+        } catch (e) { console.warn(`REVIEW_FAIL ${guid}:`, e.message); }
+        errors = validate(r);
+      }
+
+      // 최종 검증 실패 → SQS 재시도 (DLQ로 이동)
+      if (errors.length > 0) {
+        throw new Error(`Incomplete: ${errors.join(',')}`);
+      }
+
       const ft = Array.isArray(r.features) ? r.features.join(', ') : (r.features || '');
       await ddb.send(new UpdateCommand({
         TableName: TABLE, Key: { pk: guid, sk: 'ARTICLE' },
