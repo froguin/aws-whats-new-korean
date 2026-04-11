@@ -443,8 +443,7 @@ export default function App() {
   const mobileCards = (
     <Cards
       loading={loading} loadingText="업데이트를 불러오는 중..."
-      items={paged} selectionType="single" selectedItems={selectedItems}
-      onSelectionChange={onSelectionChange} trackBy="id"
+      items={paged} trackBy="id"
       header={headerEl}
       filter={
         <TextFilter
