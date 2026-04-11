@@ -139,8 +139,8 @@ export default function App() {
 
   useEffect(() => {
     document.title = selectedItems[0]
-      ? `${selectedItems[0].title} — AWS 새소식 한국어`
-      : 'AWS 새소식 한국어';
+      ? `${selectedItems[0].title} — AWS What's New 한국어 요약`
+      : "AWS What's New 한국어 요약";
   }, [selectedItems]);
 
   const filtered = useMemo(() => {
@@ -324,11 +324,11 @@ export default function App() {
           onClick: () => setDark(d => !d),
           disableUtilityCollapse: true,
         },
-        {
-          type: 'button', text: isMobile ? 'GH' : 'GitHub',
+        ...(!isMobile ? [{
+          type: 'button' as const, text: 'GitHub',
           href: 'https://github.com/froguin/aws-whats-new-korean',
           external: true, disableUtilityCollapse: true,
-        },
+        }] : []),
       ]}
     />
     <AppLayout
