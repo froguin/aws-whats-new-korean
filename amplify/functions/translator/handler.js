@@ -18,8 +18,54 @@ const RULES = `<rules>
 - 버전 문자열의 "beta"/"preview"는 서비스 상태가 아님
 - target: 한 문장, 최대 50자
 - features: 쉼표 구분, 최대 3개, 총 80자
-- regions: AWS 한국어 리전명 또는 "모든 AWS 리전", 최대 60자
+- regions: 생략 (자동 추출됨)
 </rules>`;
+
+// ── Region extraction from English description ──
+const REGION_MAP = {
+  'US East (N. Virginia)': '미국 동부(버지니아 북부)', 'US East (Ohio)': '미국 동부(오하이오)',
+  'US West (Oregon)': '미국 서부(오레곤)', 'US West (N. California)': '미국 서부(북부 캘리포니아)',
+  'Asia Pacific (Seoul)': '아시아 태평양(서울)', 'Asia Pacific (Tokyo)': '아시아 태평양(도쿄)',
+  'Asia Pacific (Osaka)': '아시아 태평양(오사카)', 'Asia Pacific (Singapore)': '아시아 태평양(싱가포르)',
+  'Asia Pacific (Sydney)': '아시아 태평양(시드니)', 'Asia Pacific (Melbourne)': '아시아 태평양(멜버른)',
+  'Asia Pacific (Mumbai)': '아시아 태평양(뭄바이)', 'Asia Pacific (Hong Kong)': '아시아 태평양(홍콩)',
+  'Asia Pacific (Jakarta)': '아시아 태평양(자카르타)', 'Asia Pacific (Hyderabad)': '아시아 태평양(하이데라바드)',
+  'Asia Pacific (Malaysia)': '아시아 태평양(말레이시아)', 'Asia Pacific (New Zealand)': '아시아 태평양(뉴질랜드)',
+  'Asia Pacific (Taipei)': '아시아 태평양(타이베이)', 'Asia Pacific (Thailand)': '아시아 태평양(태국)',
+  'Europe (Ireland)': '유럽(아일랜드)', 'Europe (London)': '유럽(런던)',
+  'Europe (Frankfurt)': '유럽(프랑크푸르트)', 'Europe (Paris)': '유럽(파리)',
+  'Europe (Stockholm)': '유럽(스톡홀름)', 'Europe (Milan)': '유럽(밀라노)',
+  'Europe (Spain)': '유럽(스페인)', 'Europe (Zurich)': '유럽(취리히)',
+  'Canada (Central)': '캐나다(중부)', 'Canada (West)': '캐나다(서부)',
+  'South America (Sao Paulo)': '남아메리카(상파울루)', 'South America (São Paulo)': '남아메리카(상파울루)',
+  'Middle East (Bahrain)': '중동(바레인)', 'Middle East (UAE)': '중동(UAE)',
+  'Africa (Cape Town)': '아프리카(케이프타운)', 'Israel (Tel Aviv)': '이스라엘(텔아비브)',
+  'China (Beijing)': '중국(베이징)', 'China (Ningxia)': '중국(닝샤)',
+  'AWS GovCloud (US)': 'AWS GovCloud(미국)', 'AWS GovCloud (US-East)': 'AWS GovCloud(미국-동부)',
+  'AWS GovCloud (US-West)': 'AWS GovCloud(미국-서부)',
+};
+const ALL_REGION_RE = /\b[Aa]ll\s+(?:(?:commercial|public|supported)\s+)?(?:AWS\s+)?(?:commercial\s+)?[Rr]egions?\b/;
+const INDIVIDUAL_RE = /(?:US|Europe|Asia Pacific|Canada|South America|Middle East|Africa|Israel|AWS GovCloud|China)\s*\(([^)]+)\)/g;
+
+function extractRegions(description) {
+  if (!description) return '모든 AWS 리전';
+  if (ALL_REGION_RE.test(description)) return '모든 AWS 리전';
+  const found = new Set();
+  let m;
+  while ((m = INDIVIDUAL_RE.exec(description)) !== null) {
+    const full = m[0];
+    // Handle compound: "Europe (Frankfurt, Ireland, London)"
+    const prefix = full.split('(')[0].trim();
+    const cities = m[1].split(',').map(c => c.trim());
+    for (const city of cities) {
+      const key = `${prefix} (${city})`;
+      const mapped = REGION_MAP[key];
+      if (mapped) found.add(mapped);
+      else found.add(`${prefix}(${city})`); // fallback: keep structure
+    }
+  }
+  return found.size > 0 ? [...found].join(', ') : '모든 AWS 리전';
+}
 
 const SYS = `한국어 클라우드 뉴스 요약기. 출력: 유효한 JSON만. 마크다운/코드펜스 금지.\n${RULES}`;
 const REV = `한국어 클라우드 뉴스 카드 검수. 규칙 위반 수정:\n${RULES}\n<output>수정된 필드 JSON만. 정상이면: {"pass":true}</output>`;
@@ -46,7 +92,6 @@ function validate(r) {
   if (r.summary && r.summary.length > 200) errors.push('summary_long');
   if (!r.target) errors.push('target_missing');
   if (!r.features) errors.push('features_missing');
-  if (!r.regions) errors.push('regions_missing');
   const cjk = ((r.title || '') + (r.summary || '')).match(/[一-龥ぁ-ヿ]/g);
   if (cjk && cjk.length >= 3) errors.push('cjk_contamination');
   if (/[_*`#]/.test(r.summary || '')) errors.push('markdown_artifacts');
@@ -102,7 +147,7 @@ export const handler = async (event) => {
         TableName: TABLE, Key: { pk: guid, sk: 'ARTICLE' },
         UpdateExpression: 'SET title_ko=:tk, summary_ko=:sk, target=:tg, features=:ft, regions=:rg, #st=:st, #u=if_not_exists(#u,:u), gsi1pk=:g, translatedAt=:ta',
         ExpressionAttributeNames: { '#st': 'status', '#u': 'url' },
-        ExpressionAttributeValues: { ':tk': r.title||'', ':sk': r.summary||'', ':tg': r.target||'', ':ft': ft, ':rg': r.regions||'', ':st': normalizeStatus(r.status), ':u': url || guid, ':g': 'STATUS#translated', ':ta': new Date().toISOString() },
+        ExpressionAttributeValues: { ':tk': r.title||'', ':sk': r.summary||'', ':tg': r.target||'', ':ft': ft, ':rg': extractRegions(description), ':st': normalizeStatus(r.status), ':u': url || guid, ':g': 'STATUS#translated', ':ta': new Date().toISOString() },
       }));
       console.log(`OK ${guid}: ${r.title}`);
     } catch (e) { console.error(`FAIL ${guid}:`, e.message); throw e; }
