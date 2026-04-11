@@ -1,17 +1,3 @@
 [build]
-  command = "mkdir -p dist"
+  command = "mkdir -p dist && cp public/index.html dist/"
   publish = "dist"
-
-[[redirects]]
-  from = "/*"
-  to = "https://main.d27cqsuosbietu.amplifyapp.com/:splat"
-  status = 301
-  force = true
-  [redirects.conditions]
-    Host = "aws-whats-new-korean.netlify.app"
-
-[[redirects]]
-  from = "/*"
-  to = "https://whats-new.kr/aws"
-  status = 301
-  force = true
