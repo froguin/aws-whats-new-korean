@@ -285,6 +285,7 @@ export default function App() {
     { id: 'pubDate', header: '날짜', width: 120, cell: (item: Article) => formatDate(item.pubDate), sortingField: 'pubDate' },
     { id: 'status', header: '상태', width: 110, cell: (item: Article) => <StatusIndicator type={getStatusType(item.status)}>{getStatusLabel(item.status)}</StatusIndicator> },
     { id: 'title', header: '제목', cell: (item: Article) => item.title || item.titleEn, sortingField: 'title' },
+    { id: 'regions', header: '리전', width: 160, cell: (item: Article) => <Box color="text-body-secondary" fontSize="body-s">{item.regions || ''}</Box> },
   ], []);
 
   const desktopTable = (
