@@ -391,7 +391,7 @@ export default function App() {
   const headerEl = (
     <Header
       counter={hasFilter ? `(${filtered.length}/${items.length})` : `(${items.length})`}
-      description={`AWS 공식 릴리스 노트를 한국어로 자동 번역·요약하여 제공합니다. ${descText}`}
+      description="AWS 공식 릴리스 노트를 한국어로 자동 번역·요약하여 제공합니다."
       actions={
         <SpaceBetween direction="horizontal" size="xs">
           {detail && <Button href={detail.url} iconName="external" target="_blank" variant="normal">원문 보기</Button>}
