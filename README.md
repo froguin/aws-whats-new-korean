@@ -9,7 +9,11 @@ AWS 공식 [What's New](https://aws.amazon.com/new/) 릴리스 노트를 Amazon 
 - 15분 주기 RSS 자동 수집
 - Nova Lite로 번역 → Nova Micro로 AI 검수 (2단계 파이프라인)
 - 품질 게이트: CJK 오염, 빈 필드, 제목 품질 자동 감지 및 재시도
-- Cloudscape Design System 기반 반응형 UI (다크 모드 지원)
+- 리전 자동 추출: 원문 description에서 정규식으로 개별 리전 추출 → 32개 영한 매핑 테이블로 정규화
+- Cloudscape Design System 기반 반응형 UI
+  - PC: Table + PropertyFilter + CollectionPreferences + SplitPanel(bottom)
+  - 모바일: Cards + 전체화면 상세 뷰
+  - 다크 모드, Amazon Ember 폰트
 - 완전 서버리스 — 월 $1 미만 운영 가능
 
 ## 아키텍처
@@ -19,14 +23,15 @@ EventBridge (15분 크론)
   → Lambda: RSS 수집 → DynamoDB 저장 → SQS 큐잉
 
 SQS → Lambda:
-  → Bedrock Nova Lite: 번역 (제목·요약·상태·대상·기능·리전 추출)
+  → Bedrock Nova Lite: 번역 (제목·요약·상태·대상·기능)
+  → 리전 자동 추출 (description에서 정규식 + 매핑 테이블)
   → 품질 게이트: 필수 필드 검증, CJK 오염 감지 → 재시도
   → Bedrock Nova Micro: AI 검수 (필드별 교차 검증, 오류 시 수정)
   → DynamoDB 저장
 
-Amplify (React SPA)
-  → Cloudscape 테마 대시보드
-  → API Gateway HTTP API
+Amplify Gen 2 (React SPA + CDK 백엔드)
+  → Cloudscape 대시보드
+  → API Gateway HTTP API (자동 배포)
      ├─ GET /articles  기사 조회
      └─ GET /stats     파이프라인 상태
 ```
@@ -52,7 +57,8 @@ Amplify (React SPA)
 
 ```bash
 # Amplify Console에서 GitHub 레포 연결
-# → git push 시 프론트엔드 + 백엔드 자동 배포
+# → git push 시 프론트엔드 + 백엔드 자동 배포 (amplify.yml)
+# → API Gateway URL은 amplify_outputs.json에서 자동 주입
 ```
 
 ## 로컬 개발
@@ -70,22 +76,20 @@ npx ampx sandbox         # 백엔드 샌드박스 (DynamoDB, SQS, Lambda)
 │   ├── backend.ts             # Amplify Gen 2 백엔드 (CDK)
 │   └── functions/
 │       ├── rss-collector/     # RSS 수집 (15분 크론)
-│       ├── translator/        # 번역 + 검수 (SQS trigger)
+│       ├── translator/        # 번역 + 검수 + 리전 추출 (SQS trigger)
 │       └── api/               # API (API Gateway HTTP API → Lambda)
-├── scripts/
-│   └── retranslate-existing.cjs  # 기존 기사 재번역 스크립트
 ├── src/
-│   ├── App.tsx                # 메인 대시보드 (Cloudscape Cards)
-│   ├── main.tsx               # 엔트리포인트 (테마 설정)
-│   └── fonts.css              # Amazon Ember 폰트
-└── amplify.yml                # Amplify 빌드 설정
+│   ├── App.tsx                # 메인 대시보드 (PC: Table, 모바일: Cards)
+│   ├── main.tsx               # 엔트리포인트
+│   └── fonts.css              # Amazon Ember 폰트 + Cloudscape 오버라이드
+└── amplify.yml                # Amplify 빌드 설정 (node_modules 캐시)
 ```
 
 ## 설정
 
 | 환경변수 | 설명 | 기본값 |
 |---------|------|--------|
-| `VITE_API_URL` | API Gateway URL | Amplify 환경변수로 설정 |
+| `VITE_API_URL` | API Gateway URL | `amplify_outputs.json`에서 자동 주입 |
 | `BEDROCK_TRANSLATE_MODEL` | 번역 모델 | `apac.amazon.nova-lite-v1:0` |
 | `BEDROCK_REVIEW_MODEL` | 검수 모델 | `apac.amazon.nova-micro-v1:0` |
 
