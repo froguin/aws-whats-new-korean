@@ -130,13 +130,15 @@ const COLUMN_DEFS = [
       if (regions.length === 0) return <Box>-</Box>;
       if (regions.length <= 2) return <Box fontSize="body-s" color="text-body-secondary">{regions.join(', ')}</Box>;
       return (
-        <Popover
-          dismissButton={false} position="top" size="medium"
-          triggerType="text"
-          content={<Box>{regions.join(', ')}</Box>}
-        >
+        <div onClick={e => e.stopPropagation()}>
+          <Popover
+            dismissButton={false} position="top" size="medium"
+            triggerType="text"
+            content={<Box>{regions.join(', ')}</Box>}
+          >
           <Box fontSize="body-s" color="text-body-secondary">{regions.slice(0, 2).join(', ')} <Badge>+{regions.length - 2}</Badge></Box>
-        </Popover>
+          </Popover>
+        </div>
       );
     },
   },
