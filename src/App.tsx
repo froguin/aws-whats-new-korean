@@ -576,7 +576,7 @@ export default function App() {
       notifications={<Flashbar items={flashItems} />}
       content={isMobile ? (detail ? mobileDetail : mobileCards) : desktopTable}
     />
-    <div>
+    <div style={{ backgroundColor: 'var(--color-background-cell-shaded, transparent)' }}>
       <Box textAlign="center" padding="s" color="text-body-secondary" fontSize="body-s">
         © {new Date().getFullYear()} AWS What's New 한국어 요약 · Powered by Amazon Nova · 비공식 프로젝트이며 AWS와 무관합니다.
       </Box>
