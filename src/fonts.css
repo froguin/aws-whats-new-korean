@@ -41,3 +41,8 @@ body {
     display: none !important;
   }
 }
+
+/* Dark mode: TopNavigation slightly darker */
+.awsui-dark-mode [class*="awsui_top-navigation"] {
+  background-color: var(--color-background-cell-shaded, #192534) !important;
+}
