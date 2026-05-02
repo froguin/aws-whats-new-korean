@@ -570,7 +570,7 @@ export default function App() {
     <AppLayout
       navigationHide toolsHide
       splitPanelOpen={!isMobile && splitOpen}
-      onSplitPanelToggle={({ detail }) => setSplitOpen(detail.open)}
+      onSplitPanelToggle={({ detail }) => { setSplitOpen(detail.open); if (!detail.open) setSelectedItems([]); }}
       splitPanelPreferences={{ position: 'bottom' }}
       splitPanel={!isMobile ? splitPanel : undefined}
       notifications={<Flashbar items={flashItems} />}
