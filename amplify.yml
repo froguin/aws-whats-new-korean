@@ -24,6 +24,9 @@ frontend:
             API_URL=$(node -p "JSON.parse(require('fs').readFileSync('amplify_outputs.json','utf8')).custom?.apiUrl || ''")
             export VITE_API_URL="$API_URL"
             echo "VITE_API_URL=$API_URL"
+            RUM_ID=$(node -p "JSON.parse(require('fs').readFileSync('amplify_outputs.json','utf8')).custom?.rumIdentityPoolId || ''")
+            export VITE_RUM_IDENTITY_POOL_ID="$RUM_ID"
+            echo "VITE_RUM_IDENTITY_POOL_ID=$RUM_ID"
           fi
           npm run build
     postBuild:

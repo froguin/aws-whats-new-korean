@@ -8,8 +8,10 @@ import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigwv2Integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import * as rum from 'aws-cdk-lib/aws-rum';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
-import { Duration, RemovalPolicy } from 'aws-cdk-lib';
+import { Duration, RemovalPolicy, CfnOutput } from 'aws-cdk-lib';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -106,11 +108,53 @@ const apiIntegration = new apigwv2Integrations.HttpLambdaIntegration('ApiIntegra
 httpApi.addRoutes({ path: '/articles', methods: [apigwv2.HttpMethod.GET], integration: apiIntegration });
 httpApi.addRoutes({ path: '/stats', methods: [apigwv2.HttpMethod.GET], integration: apiIntegration });
 
+// ── CloudWatch RUM ──
+const identityPool = new cognito.CfnIdentityPool(stack, 'RumIdentityPool', {
+  allowUnauthenticatedIdentities: true,
+  identityPoolName: 'awskr-rum-pool',
+});
+
+const unauthRole = new iam.Role(stack, 'RumUnauthRole', {
+  assumedBy: new iam.FederatedPrincipal('cognito-identity.amazonaws.com', {
+    'StringEquals': { 'cognito-identity.amazonaws.com:aud': identityPool.ref },
+    'ForAnyValue:StringLike': { 'cognito-identity.amazonaws.com:amr': 'unauthenticated' },
+  }, 'sts:AssumeRoleWithWebIdentity'),
+  inlinePolicies: {
+    rum: new iam.PolicyDocument({
+      statements: [new iam.PolicyStatement({
+        actions: ['rum:PutRumEvents'],
+        resources: [`arn:aws:rum:${stack.region}:${stack.account}:appmonitor/awskr-rum`],
+      })],
+    }),
+  },
+});
+
+new cognito.CfnIdentityPoolRoleAttachment(stack, 'RumIdentityPoolRoles', {
+  identityPoolId: identityPool.ref,
+  roles: { unauthenticated: unauthRole.roleArn },
+});
+
+const appMonitor = new rum.CfnAppMonitor(stack, 'RumAppMonitor', {
+  name: 'awskr-rum',
+  domainList: ['release.awskr.net', 'main.d27cqsuosbietu.amplifyapp.com', 'localhost'],
+  appMonitorConfiguration: {
+    allowCookies: true,
+    enableXRay: false,
+    sessionSampleRate: 1.0,
+    telemetries: ['performance', 'errors', 'http'],
+    identityPoolId: identityPool.ref,
+    guestRoleArn: unauthRole.roleArn,
+  },
+});
+
 // ── Outputs ──
 backend.addOutput({
   custom: {
     tableName: table.tableName,
     queueUrl: queue.queueUrl,
     apiUrl: httpApi.url || "",
+    rumAppMonitorId: appMonitor.attrId,
+    rumIdentityPoolId: identityPool.ref,
+    rumGuestRoleArn: unauthRole.roleArn,
   },
 });
