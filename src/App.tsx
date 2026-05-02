@@ -321,7 +321,7 @@ export default function App() {
   // ── SplitPanel detail ──
   const detailRegions = useMemo(() => detail ? parseRegions(detail.regions) : [], [detail]);
   const splitPanel = detail ? (
-    <SplitPanel header={detail.title || detail.titleEn} hidePreferencesButton closeBehavior="hide" i18nStrings={splitPanelI18n}>
+    <SplitPanel header={detail.title || detail.titleEn} hidePreferencesButton i18nStrings={splitPanelI18n}>
       <ColumnLayout columns={2} variant="text-grid">
         <SpaceBetween size="m">
           <KeyValuePairs
@@ -355,7 +355,7 @@ export default function App() {
       </ColumnLayout>
     </SplitPanel>
   ) : (
-    <SplitPanel header="상세 정보" hidePreferencesButton closeBehavior="hide" i18nStrings={splitPanelI18n}>
+    <SplitPanel header="상세 정보" hidePreferencesButton i18nStrings={splitPanelI18n}>
       <Box textAlign="center" color="text-body-secondary" padding="l">
         목록에서 항목을 선택하면 상세 내용이 여기에 표시됩니다.
       </Box>
