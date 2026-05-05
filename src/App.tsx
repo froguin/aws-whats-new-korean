@@ -207,11 +207,18 @@ export default function App() {
     if (!API_URL) { setError('API 주소가 설정되지 않았습니다.'); setLoading(false); return; }
     setLoading(true); setError(null);
     try {
-      const r = await fetch(`${API_URL}/articles?limit=200`, { signal });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const d = await r.json();
-      setItems(d.items || []);
-      setFlashItems([{ type: 'success', content: `${(d.items || []).length}개의 릴리스 노트를 불러왔습니다.`, dismissible: true, dismissLabel: '닫기', onDismiss: () => setFlashItems([]), id: 'load-success' }]);
+      let all: Article[] = [];
+      let nextToken: string | null = null;
+      do {
+        const url: string = `${API_URL}/articles?limit=200${nextToken ? `&nextToken=${encodeURIComponent(nextToken)}` : ''}`;
+        const r: Response = await fetch(url, { signal });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d: { items?: Article[]; nextToken?: string } = await r.json();
+        all = all.concat(d.items || []);
+        nextToken = d.nextToken || null;
+      } while (nextToken && !signal?.aborted);
+      setItems(all);
+      setFlashItems([{ type: 'success', content: `${all.length}개의 릴리스 노트를 불러왔습니다.`, dismissible: true, dismissLabel: '닫기', onDismiss: () => setFlashItems([]), id: 'load-success' }]);
     } catch (e: any) {
       if (signal?.aborted) return;
       const msg = e.message?.startsWith('HTTP 5') ? '서버 오류가 발생했습니다.' :

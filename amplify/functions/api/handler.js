@@ -50,19 +50,24 @@ export const handler = async (event) => {
   if (path === '/articles') {
     const limit = Math.min(parseInt(params.limit || '50'), 200);
     const status = params.status || 'translated';
-    const result = await ddb.send(new QueryCommand({
+    const queryParams = {
       TableName: TABLE, IndexName: 'gsi1',
       KeyConditionExpression: 'gsi1pk = :pk',
       ExpressionAttributeValues: { ':pk': `STATUS#${status}` },
       ScanIndexForward: false, Limit: limit,
-    }));
+    };
+    if (params.nextToken) {
+      try { queryParams.ExclusiveStartKey = JSON.parse(Buffer.from(params.nextToken, 'base64url').toString()); } catch {}
+    }
+    const result = await ddb.send(new QueryCommand(queryParams));
     const items = (result.Items || []).map(i => ({
       id: i.pk, title: i.title_ko || i.title_en, titleEn: i.title_en,
       summary: i.summary_ko || i.description || '', description: i.description || '',
       target: i.target || '', features: i.features || '', regions: i.regions || '',
       status: i.status || '정식 출시', url: i.url || i.pk, pubDate: i.pubDate,
     }));
-    return { statusCode: 200, headers, body: JSON.stringify({ items, count: items.length }) };
+    const nextToken = result.LastEvaluatedKey ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString('base64url') : null;
+    return { statusCode: 200, headers, body: JSON.stringify({ items, count: items.length, nextToken }) };
   }
 
   if (path === '/stats') {

@@ -30,8 +30,10 @@
 /* Cloudscape font override via CSS custom property */
 :root, .awsui-dark-mode, .awsui {
   --font-family-base: "Amazon Ember", "Noto Sans KR", "Helvetica Neue", Roboto, Arial, sans-serif !important;
+  --font-family-base-gmnpzl: "Amazon Ember", "Noto Sans KR", "Helvetica Neue", Roboto, Arial, sans-serif !important;
 }
 body {
+  --font-family-base-gmnpzl: "Amazon Ember", "Noto Sans KR", "Helvetica Neue", Roboto, Arial, sans-serif !important;
   font-family: "Amazon Ember", "Noto Sans KR", "Helvetica Neue", Roboto, Arial, sans-serif;
 }
 
