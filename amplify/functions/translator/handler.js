@@ -64,6 +64,10 @@ function extractRegions(description) {
       else found.add(`${prefix}(${city})`); // fallback: keep structure
     }
   }
+  // Remove GovCloud generic if specific East/West already present
+  if (found.has('AWS GovCloud(미국)') && (found.has('AWS GovCloud(미국-동부)') || found.has('AWS GovCloud(미국-서부)'))) {
+    found.delete('AWS GovCloud(미국)');
+  }
   return found.size > 0 ? [...found].join(', ') : '모든 AWS 리전';
 }
 
