@@ -32,11 +32,11 @@ const INDIVIDUAL_RE = /(?:US East|US West|Europe|Asia Pacific|Canada West|Canada
 
 function extractRegionsFromText(description) {
   if (!description) return new Set();
-  // Only extract from "available in" context sentences
   const found = new Set();
-  const availSentences = description.match(/[^.]*(?:available|supported|launched)\s+in\s+[^.]*\./gi) || [];
+  // Split on sentence-ending periods (not abbreviation periods like "N. Virginia")
+  const cleanDesc = description.replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/g, ' ');
+  const availSentences = cleanDesc.match(/[^.]*(?:available|supported|launched)\s+in\s+[^.]*(?:\.[^.)]*\))?[^.]*/gi) || [];
   for (const sent of availSentences) {
-    // Skip procedural mentions
     if (/(?:console|request|support|contact)\s+(?:in|through|via)/i.test(sent)) continue;
     if (/except/i.test(sent)) continue;
     let m;
