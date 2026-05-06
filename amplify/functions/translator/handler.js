@@ -1,8 +1,11 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 
 const TABLE = process.env.TABLE_NAME;
+const REGION_RESOLVER_QUEUE_URL = process.env.REGION_RESOLVER_QUEUE_URL;
+const sqsClient = new SQSClient({});
 const TRANSLATE_MODEL = process.env.BEDROCK_TRANSLATE_MODEL;
 const REVIEW_MODEL = process.env.BEDROCK_REVIEW_MODEL;
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -20,6 +23,7 @@ const RULES = `<rules>
 - features: 쉼표 구분, 최대 3개, 총 80자
 - regions: 서비스가 실제로 가용한(available/supported/launched) 리전만 추출. 아래 규칙 준수:
   - "all regions" 또는 글로벌 서비스 → "모든 AWS 리전"
+  - "available in all regions where X is available" 패턴 → "__SERVICE__:서비스코드" (예: "__SERVICE__:eks", "__SERVICE__:lambda")
   - 구체적 리전 나열 시 → 한국어 리전명으로 변환하여 쉼표 구분 (예: "미국 동부(버지니아 북부), 유럽(프랑크푸르트)")
   - 절차 안내 문맥("use the console in...", "request through...")에서 언급된 리전은 제외
   - "except" 뒤의 리전은 제외 리전이므로 추출하지 않음
@@ -103,12 +107,23 @@ export const handler = async (event) => {
       }
 
       const ft = Array.isArray(r.features) ? r.features.join(', ') : (r.features || '');
+      const regionsVal = r.regions || '모든 AWS 리전';
+      const serviceMatch = regionsVal.match(/^__SERVICE__:(.+)$/);
+
       await ddb.send(new UpdateCommand({
         TableName: TABLE, Key: { pk: guid, sk: 'ARTICLE' },
         UpdateExpression: 'SET title_ko=:tk, summary_ko=:sk, target=:tg, features=:ft, regions=:rg, #st=:st, #u=if_not_exists(#u,:u), gsi1pk=:g, translatedAt=:ta',
         ExpressionAttributeNames: { '#st': 'status', '#u': 'url' },
-        ExpressionAttributeValues: { ':tk': r.title||'', ':sk': r.summary||'', ':tg': r.target||'', ':ft': ft, ':rg': r.regions || '모든 AWS 리전', ':st': normalizeStatus(r.status), ':u': url || guid, ':g': 'STATUS#translated', ':ta': new Date().toISOString() },
+        ExpressionAttributeValues: { ':tk': r.title||'', ':sk': r.summary||'', ':tg': r.target||'', ':ft': ft, ':rg': serviceMatch ? `${serviceMatch[1]} 가용 리전` : regionsVal, ':st': normalizeStatus(r.status), ':u': url || guid, ':g': 'STATUS#translated', ':ta': new Date().toISOString() },
       }));
+
+      if (serviceMatch && REGION_RESOLVER_QUEUE_URL) {
+        await sqsClient.send(new SendMessageCommand({
+          QueueUrl: REGION_RESOLVER_QUEUE_URL,
+          MessageBody: JSON.stringify({ guid, service: serviceMatch[1] }),
+        }));
+        console.log(`REGION_QUEUE ${guid}: ${serviceMatch[1]}`);
+      }
       console.log(`OK ${guid}: ${r.title}`);
     } catch (e) { console.error(`FAIL ${guid}:`, e.message); throw e; }
   }

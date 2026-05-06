@@ -63,6 +63,25 @@ new events.Rule(stack, 'RssSchedule', {
 });
 
 // ── Lambda: Translator ──
+const regionResolverQueue = new sqs.Queue(stack, 'RegionResolverQueue', {
+  visibilityTimeout: Duration.minutes(5),
+  retentionPeriod: Duration.days(1),
+});
+
+const regionResolver = new NodejsFunction(stack, 'RegionResolver', {
+  ...nodejsProps,
+  entry: path.join(__dirname, 'functions', 'region-resolver', 'handler.js'),
+  timeout: Duration.minutes(2),
+  memorySize: 256,
+  environment: { TABLE_NAME: table.tableName },
+});
+table.grantReadWriteData(regionResolver);
+regionResolver.addToRolePolicy(new iam.PolicyStatement({
+  actions: ['ssm:GetParametersByPath'],
+  resources: ['arn:aws:ssm:us-east-1::parameter/aws/service/global-infrastructure/*'],
+}));
+regionResolver.addEventSource(new lambdaEventSources.SqsEventSource(regionResolverQueue, { batchSize: 5 }));
+
 const translator = new NodejsFunction(stack, 'Translator', {
   ...nodejsProps,
   entry: path.join(__dirname, 'functions', 'translator', 'handler.js'),
@@ -72,9 +91,11 @@ const translator = new NodejsFunction(stack, 'Translator', {
     TABLE_NAME: table.tableName,
     BEDROCK_TRANSLATE_MODEL: 'apac.amazon.nova-lite-v1:0',
     BEDROCK_REVIEW_MODEL: 'apac.amazon.nova-micro-v1:0',
+    REGION_RESOLVER_QUEUE_URL: regionResolverQueue.queueUrl,
   },
 });
 table.grantReadWriteData(translator);
+regionResolverQueue.grantSendMessages(translator);
 translator.addToRolePolicy(new iam.PolicyStatement({
   actions: ['bedrock:InvokeModel'],
   resources: [
@@ -152,6 +173,7 @@ backend.addOutput({
   custom: {
     tableName: table.tableName,
     queueUrl: queue.queueUrl,
+    regionResolverQueueUrl: regionResolverQueue.queueUrl,
     apiUrl: httpApi.url || "",
     rumAppMonitorId: appMonitor.attrId,
     rumIdentityPoolId: identityPool.ref,
