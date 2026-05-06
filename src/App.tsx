@@ -120,7 +120,7 @@ const COLUMN_DEFS = [
     ),
   },
   {
-    id: 'target', header: '대상', width: 160,
+    id: 'target', header: '대상', width: 130,
     cell: (item: Article) => item.target ? <Box fontSize="body-s">{item.target}</Box> : <Box>-</Box>,
   },
   {
@@ -153,7 +153,7 @@ const COLUMN_DEFS = [
   },
 ];
 
-const DEFAULT_VISIBLE = ['status', 'pubDate', 'title', 'regions'];
+const DEFAULT_VISIBLE = ['status', 'pubDate', 'title', 'target', 'regions'];
 const PAGE_SIZE_OPTIONS = [
   { value: 10, label: '10개' },
   { value: 25, label: '25개' },
