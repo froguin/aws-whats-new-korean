@@ -36,7 +36,7 @@ const REGION_MAP = {
   'Europe (Frankfurt)': '유럽(프랑크푸르트)', 'Europe (Paris)': '유럽(파리)',
   'Europe (Stockholm)': '유럽(스톡홀름)', 'Europe (Milan)': '유럽(밀라노)',
   'Europe (Spain)': '유럽(스페인)', 'Europe (Zurich)': '유럽(취리히)',
-  'Canada (Central)': '캐나다(중부)', 'Canada (West)': '캐나다(서부)',
+  'Canada (Central)': '캐나다(중부)', 'Canada (West)': '캐나다(서부)', 'Canada West (Calgary)': '캐나다 서부(캘거리)',
   'South America (Sao Paulo)': '남아메리카(상파울루)', 'South America (São Paulo)': '남아메리카(상파울루)',
   'Middle East (Bahrain)': '중동(바레인)', 'Middle East (UAE)': '중동(UAE)',
   'Africa (Cape Town)': '아프리카(케이프타운)', 'Israel (Tel Aviv)': '이스라엘(텔아비브)',
@@ -45,7 +45,7 @@ const REGION_MAP = {
   'AWS GovCloud (US-West)': 'AWS GovCloud(미국-서부)',
 };
 const ALL_REGION_RE = /\b[Aa]ll\s+(?:(?:commercial|public|supported)\s+)?(?:AWS\s+)?(?:commercial\s+)?[Rr]egions?\b/;
-const INDIVIDUAL_RE = /(?:US|Europe|Asia Pacific|Canada|South America|Middle East|Africa|Israel|AWS GovCloud|China)\s*\(([^)]+)\)/g;
+const INDIVIDUAL_RE = /(?:US East|US West|Europe|Asia Pacific|Canada West|Canada|South America|Middle East|Africa|Israel|AWS GovCloud|China)\s*\(([^)]+)\)/g;
 
 function extractRegions(description) {
   if (!description) return '모든 AWS 리전';
