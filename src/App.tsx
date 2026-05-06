@@ -109,12 +109,12 @@ const COLUMN_DEFS = [
     ),
   },
   {
-    id: 'title', header: '제목', sortingField: 'title',
+    id: 'title', header: '제목', sortingField: 'title', width: 350,
     cell: (item: Article) => (
       <SpaceBetween direction="vertical" size="xxxs">
         <Box fontWeight="bold">{item.title || item.titleEn}</Box>
         {item.titleEn && item.title !== item.titleEn && (
-          <Box fontSize="body-s" color="text-body-secondary">{item.titleEn}</Box>
+          <Box fontSize="body-s" color="text-body-secondary"><span style={{display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '320px'}}>{item.titleEn}</span></Box>
         )}
       </SpaceBetween>
     ),
@@ -124,19 +124,20 @@ const COLUMN_DEFS = [
     cell: (item: Article) => item.target ? <Box fontSize="body-s">{item.target}</Box> : <Box>-</Box>,
   },
   {
-    id: 'regions', header: '리전', width: 200,
+    id: 'regions', header: '리전', width: 180,
     cell: (item: Article) => {
       const regions = parseRegions(item.regions);
       if (regions.length === 0) return <Box>-</Box>;
-      if (regions.length <= 2) return <Box fontSize="body-s" color="text-body-secondary" variant="span"><span style={{wordBreak: 'keep-all', overflowWrap: 'break-word'}}>{regions.join(', ')}</span></Box>;
+      const text = regions.join(', ');
+      if (text.length <= 15) return <Box fontSize="body-s" color="text-body-secondary">{text}</Box>;
       return (
         <div onClick={e => e.stopPropagation()}>
           <Popover
             dismissButton={false} position="top" size="medium"
             triggerType="text"
-            content={<Box><span style={{wordBreak: 'keep-all', overflowWrap: 'break-word'}}>{regions.join(', ')}</span></Box>}
+            content={<Box fontSize="body-s">{text}</Box>}
           >
-          <Box fontSize="body-s" color="text-body-secondary"><span style={{wordBreak: 'keep-all', overflowWrap: 'break-word'}}>{regions.slice(0, 2).join(', ')} <Badge>+{regions.length - 2}</Badge></span></Box>
+          <Box fontSize="body-s" color="text-body-secondary">{regions.length <= 2 ? <span style={{display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px'}}>{text}</span> : <>{regions[0]} <Badge>+{regions.length - 1}</Badge></>}</Box>
           </Popover>
         </div>
       );
