@@ -109,12 +109,12 @@ const COLUMN_DEFS = [
     ),
   },
   {
-    id: 'title', header: '제목', sortingField: 'title', width: 450,
+    id: 'title', header: '제목', sortingField: 'title',
     cell: (item: Article) => (
       <SpaceBetween direction="vertical" size="xxxs">
         <Box fontWeight="bold">{item.title || item.titleEn}</Box>
         {item.titleEn && item.title !== item.titleEn && (
-          <Box fontSize="body-s" color="text-body-secondary"><span style={{display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '420px'}}>{item.titleEn}</span></Box>
+          <Box fontSize="body-s" color="text-body-secondary">{item.titleEn}</Box>
         )}
       </SpaceBetween>
     ),
