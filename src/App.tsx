@@ -153,7 +153,7 @@ const COLUMN_DEFS = [
   },
 ];
 
-const DEFAULT_VISIBLE = ['status', 'pubDate', 'title', 'target', 'regions'];
+const DEFAULT_VISIBLE = ['status', 'pubDate', 'title', 'regions'];
 const PAGE_SIZE_OPTIONS = [
   { value: 10, label: '10개' },
   { value: 25, label: '25개' },
