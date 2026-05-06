@@ -96,11 +96,11 @@ const FILTERING_PROPERTIES = [
 
 const COLUMN_DEFS = [
   {
-    id: 'status', header: '상태', width: 90, sortingField: 'status',
+    id: 'status', header: '상태', width: 72, sortingField: 'status',
     cell: (item: Article) => <StatusIndicator type={getStatusType(item.status)}>{getStatusLabel(item.status)}</StatusIndicator>,
   },
   {
-    id: 'pubDate', header: '날짜', width: 100, sortingField: 'pubDate',
+    id: 'pubDate', header: '날짜', width: 80, sortingField: 'pubDate',
     cell: (item: Article) => (
       <SpaceBetween direction="vertical" size="xxxs">
         <Box>{formatDate(item.pubDate)}</Box>
@@ -124,7 +124,7 @@ const COLUMN_DEFS = [
     cell: (item: Article) => item.target ? <Box fontSize="body-s">{item.target}</Box> : <Box>-</Box>,
   },
   {
-    id: 'regions', header: '리전', width: 180,
+    id: 'regions', header: '리전', width: 150,
     cell: (item: Article) => {
       const regions = parseRegions(item.regions);
       if (regions.length === 0) return <Box>-</Box>;
