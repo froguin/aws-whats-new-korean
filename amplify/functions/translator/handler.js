@@ -24,7 +24,7 @@ const RULES = `<rules>
 - regions: 서비스가 실제로 가용한(available/supported/launched) 리전만 추출. 아래 규칙 준수:
   - "all regions" 또는 글로벌 서비스 → "모든 AWS 리전"
   - "available in all regions where X is available" 패턴 → "__SERVICE__:서비스코드" (예: "__SERVICE__:eks", "__SERVICE__:lambda")
-  - 구체적 리전 나열 시 → 한국어 리전명으로 변환하여 쉼표 구분 (예: "미국 동부(버지니아 북부), 유럽(프랑크푸르트)")
+  - 구체적 리전이 나열된 경우 → 나열된 리전을 하나도 빠짐없이 모두 추출하여 한국어로 변환. US East, US West 포함 절대 누락 금지
   - 절차 안내 문맥("use the console in...", "request through...")에서 언급된 리전은 제외
   - "except" 뒤의 리전은 제외 리전이므로 추출하지 않음
   - 리전 정보가 없거나 불명확하면 "모든 AWS 리전"
