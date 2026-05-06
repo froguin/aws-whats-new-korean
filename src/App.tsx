@@ -96,11 +96,11 @@ const FILTERING_PROPERTIES = [
 
 const COLUMN_DEFS = [
   {
-    id: 'status', header: '상태', width: 120, sortingField: 'status',
+    id: 'status', header: '상태', width: 90, sortingField: 'status',
     cell: (item: Article) => <StatusIndicator type={getStatusType(item.status)}>{getStatusLabel(item.status)}</StatusIndicator>,
   },
   {
-    id: 'pubDate', header: '날짜', width: 150, sortingField: 'pubDate',
+    id: 'pubDate', header: '날짜', width: 100, sortingField: 'pubDate',
     cell: (item: Article) => (
       <SpaceBetween direction="vertical" size="xxxs">
         <Box>{formatDate(item.pubDate)}</Box>
@@ -109,12 +109,12 @@ const COLUMN_DEFS = [
     ),
   },
   {
-    id: 'title', header: '제목', sortingField: 'title', width: 350,
+    id: 'title', header: '제목', sortingField: 'title', width: 450,
     cell: (item: Article) => (
       <SpaceBetween direction="vertical" size="xxxs">
         <Box fontWeight="bold">{item.title || item.titleEn}</Box>
         {item.titleEn && item.title !== item.titleEn && (
-          <Box fontSize="body-s" color="text-body-secondary"><span style={{display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '320px'}}>{item.titleEn}</span></Box>
+          <Box fontSize="body-s" color="text-body-secondary"><span style={{display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '420px'}}>{item.titleEn}</span></Box>
         )}
       </SpaceBetween>
     ),
