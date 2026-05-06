@@ -54,9 +54,21 @@ function extractRegionsFromText(description) {
   return found;
 }
 
+function normalizeRegionList(regions) {
+  // "아시아 태평양(도쿄, 서울)" → "아시아 태평양(도쿄), 아시아 태평양(서울)"
+  const expanded = regions.replace(/([^,()]+)\(([^)]+)\)/g, (match, prefix, cities) => {
+    if (!cities.includes(',')) return match;
+    return cities.split(',').map(c => `${prefix.trim()}(${c.trim()})`).join(', ');
+  });
+  return expanded.replace(/,([^ ])/g, ', $1'); // ensure space after comma
+}
+
 function mergeRegions(llmRegions, regexRegions) {
-  if (!llmRegions || llmRegions === '모든 AWS 리전' || llmRegions.startsWith('__SERVICE__:')) return llmRegions;
-  const llmSet = new Set(llmRegions.split(',').map(s => s.trim()).filter(Boolean));
+  if (!llmRegions || llmRegions.startsWith('__SERVICE__:')) return llmRegions;
+  // If LLM says "모든 AWS 리전" (possibly with extras), normalize
+  if (llmRegions.includes('모든 AWS 리전')) return '모든 AWS 리전';
+  const normalized = normalizeRegionList(llmRegions);
+  const llmSet = new Set(normalized.split(',').map(s => s.trim()).filter(Boolean));
   for (const r of regexRegions) llmSet.add(r);
   return [...llmSet].join(', ');
 }
@@ -79,6 +91,8 @@ const RULES = `<rules>
   - "all regions" 또는 글로벌 서비스 → "모든 AWS 리전"
   - "available in all regions where X is available" 패턴 → "__SERVICE__:서비스코드" (예: "__SERVICE__:eks", "__SERVICE__:lambda")
   - 구체적 리전이 나열된 경우 → 나열된 리전을 하나도 빠짐없이 모두 추출하여 한국어로 변환. US East, US West 포함 절대 누락 금지
+  - 출력 형식: 각 리전을 "지역(도시)" 형태로 개별 나열. 쉼표로 구분. 하나의 괄호 안에 여러 도시 묶지 말 것 (예: "아시아 태평양(도쿄), 아시아 태평양(서울)" O, "아시아 태평양(도쿄, 서울)" X)
+  - "모든 AWS 리전"과 구체적 리전을 혼합하지 말 것. 글로벌이면 "모든 AWS 리전"만 출력
   - 절차 안내 문맥("use the console in...", "request through...")에서 언급된 리전은 제외
   - "except" 뒤의 리전은 제외 리전이므로 추출하지 않음
   - 리전 정보가 없거나 불명확하면 "모든 AWS 리전"
