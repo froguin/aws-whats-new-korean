@@ -6,6 +6,60 @@ import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 const TABLE = process.env.TABLE_NAME;
 const REGION_RESOLVER_QUEUE_URL = process.env.REGION_RESOLVER_QUEUE_URL;
 const sqsClient = new SQSClient({});
+
+// ── Region extraction fallback (supplements LLM output) ──
+const REGION_MAP = {
+  'US East (N. Virginia)': '미국 동부(버지니아 북부)', 'US East (Ohio)': '미국 동부(오하이오)',
+  'US West (Oregon)': '미국 서부(오레곤)', 'US West (N. California)': '미국 서부(북부 캘리포니아)',
+  'Asia Pacific (Seoul)': '아시아 태평양(서울)', 'Asia Pacific (Tokyo)': '아시아 태평양(도쿄)',
+  'Asia Pacific (Osaka)': '아시아 태평양(오사카)', 'Asia Pacific (Singapore)': '아시아 태평양(싱가포르)',
+  'Asia Pacific (Sydney)': '아시아 태평양(시드니)', 'Asia Pacific (Melbourne)': '아시아 태평양(멜버른)',
+  'Asia Pacific (Mumbai)': '아시아 태평양(뭄바이)', 'Asia Pacific (Hong Kong)': '아시아 태평양(홍콩)',
+  'Asia Pacific (Jakarta)': '아시아 태평양(자카르타)', 'Asia Pacific (Hyderabad)': '아시아 태평양(하이데라바드)',
+  'Asia Pacific (Malaysia)': '아시아 태평양(말레이시아)', 'Asia Pacific (Thailand)': '아시아 태평양(태국)',
+  'Europe (Ireland)': '유럽(아일랜드)', 'Europe (London)': '유럽(런던)',
+  'Europe (Frankfurt)': '유럽(프랑크푸르트)', 'Europe (Paris)': '유럽(파리)',
+  'Europe (Stockholm)': '유럽(스톡홀름)', 'Europe (Milan)': '유럽(밀라노)',
+  'Europe (Spain)': '유럽(스페인)', 'Europe (Zurich)': '유럽(취리히)',
+  'Canada (Central)': '캐나다(중부)', 'Canada West (Calgary)': '캐나다 서부(캘거리)',
+  'South America (Sao Paulo)': '남아메리카(상파울루)',
+  'Middle East (Bahrain)': '중동(바레인)', 'Middle East (UAE)': '중동(UAE)',
+  'Africa (Cape Town)': '아프리카(케이프타운)', 'Israel (Tel Aviv)': '이스라엘(텔아비브)',
+  'AWS GovCloud (US-East)': 'AWS GovCloud(미국-동부)', 'AWS GovCloud (US-West)': 'AWS GovCloud(미국-서부)',
+};
+const AVAIL_REGION_RE = /(?:available|supported|launched?)\s+in\s+[^.]*?(?:US East|US West|Europe|Asia Pacific|Canada West|Canada|South America|Middle East|Africa|Israel|AWS GovCloud|China)\s*\(([^)]+)\)/gi;
+const INDIVIDUAL_RE = /(?:US East|US West|Europe|Asia Pacific|Canada West|Canada|South America|Middle East|Africa|Israel|AWS GovCloud|China)\s*\(([^)]+)\)/g;
+
+function extractRegionsFromText(description) {
+  if (!description) return new Set();
+  // Only extract from "available in" context sentences
+  const found = new Set();
+  const availSentences = description.match(/[^.]*(?:available|supported|launched)\s+in\s+[^.]*\./gi) || [];
+  for (const sent of availSentences) {
+    // Skip procedural mentions
+    if (/(?:console|request|support|contact)\s+(?:in|through|via)/i.test(sent)) continue;
+    if (/except/i.test(sent)) continue;
+    let m;
+    const re = new RegExp(INDIVIDUAL_RE.source, 'g');
+    while ((m = re.exec(sent)) !== null) {
+      const prefix = m[0].split('(')[0].trim();
+      const cities = m[1].split(',').map(c => c.trim());
+      for (const city of cities) {
+        const key = `${prefix} (${city})`;
+        const mapped = REGION_MAP[key];
+        if (mapped) found.add(mapped);
+      }
+    }
+  }
+  return found;
+}
+
+function mergeRegions(llmRegions, regexRegions) {
+  if (!llmRegions || llmRegions === '모든 AWS 리전' || llmRegions.startsWith('__SERVICE__:')) return llmRegions;
+  const llmSet = new Set(llmRegions.split(',').map(s => s.trim()).filter(Boolean));
+  for (const r of regexRegions) llmSet.add(r);
+  return [...llmSet].join(', ');
+}
 const TRANSLATE_MODEL = process.env.BEDROCK_TRANSLATE_MODEL;
 const REVIEW_MODEL = process.env.BEDROCK_REVIEW_MODEL;
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -107,7 +161,8 @@ export const handler = async (event) => {
       }
 
       const ft = Array.isArray(r.features) ? r.features.join(', ') : (r.features || '');
-      const regionsVal = r.regions || '모든 AWS 리전';
+      const regexRegions = extractRegionsFromText(description);
+      const regionsVal = mergeRegions(r.regions || '모든 AWS 리전', regexRegions);
       const serviceMatch = regionsVal.match(/^__SERVICE__:(.+)$/);
 
       await ddb.send(new UpdateCommand({
