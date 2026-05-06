@@ -128,15 +128,15 @@ const COLUMN_DEFS = [
     cell: (item: Article) => {
       const regions = parseRegions(item.regions);
       if (regions.length === 0) return <Box>-</Box>;
-      if (regions.length <= 2) return <Box fontSize="body-s" color="text-body-secondary">{regions.join(', ')}</Box>;
+      if (regions.length <= 2) return <Box fontSize="body-s" color="text-body-secondary" variant="span"><span style={{wordBreak: 'keep-all', overflowWrap: 'break-word'}}>{regions.join(', ')}</span></Box>;
       return (
         <div onClick={e => e.stopPropagation()}>
           <Popover
             dismissButton={false} position="top" size="medium"
             triggerType="text"
-            content={<Box>{regions.join(', ')}</Box>}
+            content={<Box><span style={{wordBreak: 'keep-all', overflowWrap: 'break-word'}}>{regions.join(', ')}</span></Box>}
           >
-          <Box fontSize="body-s" color="text-body-secondary">{regions.slice(0, 2).join(', ')} <Badge>+{regions.length - 2}</Badge></Box>
+          <Box fontSize="body-s" color="text-body-secondary"><span style={{wordBreak: 'keep-all', overflowWrap: 'break-word'}}>{regions.slice(0, 2).join(', ')} <Badge>+{regions.length - 2}</Badge></span></Box>
           </Popover>
         </div>
       );
