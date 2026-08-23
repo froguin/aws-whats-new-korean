@@ -99,12 +99,42 @@ const RULES = `<rules>
   - 리전명 변환표: US East (N. Virginia)→미국 동부(버지니아 북부), US East (Ohio)→미국 동부(오하이오), US West (Oregon)→미국 서부(오레곤), US West (N. California)→미국 서부(북부 캘리포니아), Asia Pacific (Seoul)→아시아 태평양(서울), Asia Pacific (Tokyo)→아시아 태평양(도쿄), Asia Pacific (Singapore)→아시아 태평양(싱가포르), Asia Pacific (Sydney)→아시아 태평양(시드니), Asia Pacific (Mumbai)→아시아 태평양(뭄바이), Europe (Ireland)→유럽(아일랜드), Europe (Frankfurt)→유럽(프랑크푸르트), Europe (London)→유럽(런던), Canada (Central)→캐나다(중부), AWS GovCloud (US-West)→AWS GovCloud(미국-서부), AWS GovCloud (US-East)→AWS GovCloud(미국-동부) 등
 </rules>`;
 
-const SYS = `한국어 클라우드 뉴스 요약기. 출력: 유효한 JSON만. 마크다운/코드펜스 금지.\n${RULES}`;
-const REV = `한국어 클라우드 뉴스 카드 검수. 규칙 위반 수정:\n${RULES}\n<output>수정된 필드 JSON만. 정상이면: {"pass":true}</output>`;
+const KOREAN_STYLE = `<korean-style>
+한국어 번역 품질 지침: 의미가 명확하고 자연스러운 한국어 문장을 출력해야 합니다.
+
+1. 조사와 어미를 생략하지 않습니다. 부사, 보조사, 보조 용언을 적극 활용하여 의미를 명확히 합니다.
+   [기능 제공 시작 → 이 기능을 사용할 수 있게 되었습니다]
+   [데이터 암호화 지원 → 데이터를 암호화하는 기능을 지원합니다]
+2. summary는 서술어와 종결어미를 사용하여 완성된 문장으로 작성합니다. 명사구나 연결어미로 끝내지 않습니다.
+   [비용 절감 및 성능 향상 → 비용을 절감하고 성능을 향상할 수 있습니다]
+   title은 간결한 서술형("~합니다")을 기본으로 하되, 40자 제한 내에서 명사형 종결도 허용합니다.
+   [Amazon ECS에서 Fargate 스팟 지원 → Amazon ECS Fargate에서 스팟 용량을 지원합니다]
+3. 의미가 있는 문장 성분을 생략하지 않습니다. 읽는 사람이 맥락 없이도 내용을 이해할 수 있어야 합니다.
+   [이를 통해 개선 가능 → 이 기능을 활용하면 응답 시간을 단축할 수 있습니다]
+4. 비유적 어휘 대신 일반적이고 직관적인 어휘를 사용합니다.
+   [워크로드를 태울 수 있는 → 워크로드를 실행할 수 있는]
+5. '~의'를 남용하지 않고, 구체적인 조사와 어미로 관계를 표현합니다.
+   [서비스의 가용성의 향상 → 서비스 가용성이 향상되었습니다]
+6. 엠대시(—)를 자제하고, 접속사나 콜론으로 대체합니다.
+7. 고유 명사와 기술 용어는 정착된 번역어가 있으면 사용하고, 없으면 원어를 유지합니다.
+8. 번역투 표현을 지양합니다:
+   - "~에 대한" → "~을/를" 또는 적절한 조사 [보안에 대한 강화 → 보안 강화]
+   - "~를 통해" → "~(으)로", "~을/를 활용하면" [이 기능을 통해 비용 절감 → 이 기능으로 비용을 절감]
+   - "~를 위한" → "~에 필요한", "~용" [배포를 위한 도구 → 배포용 도구]
+9. 의미 없는 수식어를 넣지 않습니다:
+   - "해당" — 지시 대상이 분명하면 생략 [해당 기능을 → 이 기능을]
+   - "다양한" — 구체적으로 쓰거나 생략 [다양한 기능을 제공 → 주요 기능 3가지를 제공]
+   - "보다 나은" — 비교 대상을 명시하거나 "향상된"으로 대체
+</korean-style>`;
+
+const SYS = `한국어 클라우드 뉴스 요약기. 출력: 유효한 JSON만. 마크다운/코드펜스 금지.\n${KOREAN_STYLE}\n${RULES}`;
+const REV = `한국어 클라우드 뉴스 카드 검수기. 아래 한국어 품질 지침과 규칙을 기준으로 위반 사항을 수정합니다.\n${KOREAN_STYLE}\n${RULES}\n<review-focus>\n- 조사/어미 누락: "기능 제공" → "기능을 제공합니다"처럼 완성된 문장인지 확인\n- 번역투 표현: "~에 대한", "~를 통해" 남용 여부 확인\n- 명사 나열: 서술어 없이 명사만 나열된 문장이 있으면 서술어를 보충\n- 의미 불분명: 주어나 목적어가 누락되어 뜻이 모호한 경우 보충\n</review-focus>\n<output>수정된 필드 JSON만. 정상이면: {"pass":true}</output>`;
 
 const FEW = [
-  { role: 'user', content: [{ text: '<article>\nTitle: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13.\n</article>' }] },
-  { role: 'assistant', content: [{ text: '{"title":"AWS Lambda에서 Python 3.13 런타임 지원","summary":"Lambda 함수에서 Python 3.13을 사용할 수 있게 되었습니다. 기존 Python 함수 운영 중이라면 업그레이드를 검토할 시점입니다.","target":"Python 기반 Lambda 개발자","features":"Python 3.13 런타임, 오류 메시지 개선, 성능 향상","regions":"모든 AWS 리전","status":"정식 출시"}' }] },
+  { role: 'user', content: [{ text: '<article>\nTitle: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13. This runtime includes improved error messages and performance enhancements. Python 3.13 is available in all AWS Regions where Lambda is available.\n</article>' }] },
+  { role: 'assistant', content: [{ text: '{"title":"AWS Lambda에서 Python 3.13 런타임을 지원합니다","summary":"Lambda 함수를 생성하거나 업데이트할 때 Python 3.13 런타임을 선택할 수 있게 되었습니다. 오류 메시지가 개선되고 성능이 향상되었으므로, Python 기반 Lambda 함수를 운영하고 있다면 업그레이드를 검토해 보시기 바랍니다.","target":"Python 기반 Lambda 함수를 개발하는 사용자","features":"Python 3.13 런타임, 오류 메시지 개선, 성능 향상","regions":"__SERVICE__:lambda","status":"정식 출시"}' }] },
+  { role: 'user', content: [{ text: '<article>\nTitle: Amazon S3 now supports up to 1 million buckets per account\nDescription: Amazon S3 customers can now create up to 1 million general purpose buckets in each of their AWS accounts, a 100x increase from the previous default quota of 10,000 buckets per account. This is available in all AWS Regions.\n</article>' }] },
+  { role: 'assistant', content: [{ text: '{"title":"Amazon S3 계정당 버킷 한도가 100만 개로 확대됩니다","summary":"AWS 계정 하나에 생성할 수 있는 범용 버킷의 기본 할당량이 기존 1만 개에서 100만 개로 100배 증가했습니다. 대규모 멀티테넌트 아키텍처를 운영하거나 테넌트별 버킷을 분리해야 하는 경우에 특히 유용합니다.","target":"대규모 멀티테넌트 환경을 운영하는 개발자 및 아키텍트","features":"계정당 버킷 100만 개, 기본 할당량 100배 증가","regions":"모든 AWS 리전","status":"정식 출시"}' }] },
 ];
 
 async function invoke(modelId, system, messages) {
