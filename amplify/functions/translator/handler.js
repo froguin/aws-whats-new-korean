@@ -81,8 +81,8 @@ const RULES = `<rules>
 - 제품명, 버전, 날짜, 리전 코드는 영어 유지
 - 그 외 모든 영어는 한국어로 번역. 혼용 금지 (예: "및" not "and 및")
 - AWS 표준 용어: instance→인스턴스, deploy→배포, serverless→서버리스
-- title: 제품명 + 변경 내용, 최대 55자(절대 초과 금지). "출시" "지원"만 단독 사용 금지. 길이가 넘칠 것 같으면 부가 수식을 빼서 핵심만 담되, 단어나 조사가 중간에 잘리지 않도록 완결된 형태로 작성
-- summary: 한국어 2문장, 최대 150자(절대 200자 초과 금지). 첫째: 무엇이 변경. 둘째: 왜 중요. 길어지면 부가 설명을 덜어내고 핵심만 남길 것
+- title: 제품명 + 변경 내용을 담은 완결된 제목. 목표 40자, 최대 55자 이내로 짧게. "출시" "지원"만 단독 사용 금지. 길면 부가 수식을 빼서 핵심만 담되, 문장을 도중에 끊거나 말줄임표(…, ...)를 절대 쓰지 말고 반드시 완결된 형태로 작성
+- summary: 한국어 2문장, 목표 120자, 최대 150자 이내. 첫째: 무엇이 변경. 둘째: 왜 중요. 길면 부가 설명을 덜어내고 핵심만 남기되, 문장을 도중에 끊거나 말줄임표를 절대 쓰지 말고 완결된 문장으로 마무리
 - status: "preview"→미리보기, "beta"→베타, "retired"→지원 종료, "GA"/"launched"→정식 출시
 - 버전 문자열의 "beta"/"preview"는 서비스 상태가 아님
 - target: 한 문장, 최대 50자
@@ -160,36 +160,15 @@ async function invoke(modelId, system, messages) {
 function validate(r) {
   const errors = [];
   if (!r.title || r.title.length < 5) errors.push('title_short');
-  if (r.title && r.title.length > 70) errors.push('title_long');
+  if (r.title && r.title.length > 100) errors.push('title_long');
   if (!r.summary || r.summary.length < 10) errors.push('summary_short');
-  if (r.summary && r.summary.length > 200) errors.push('summary_long');
+  if (r.summary && r.summary.length > 300) errors.push('summary_long');
   if (!r.target) errors.push('target_missing');
   if (!r.features) errors.push('features_missing');
   const cjk = ((r.title || '') + (r.summary || '')).match(/[一-龥ぁ-ヿ]/g);
   if (cjk && cjk.length >= 3) errors.push('cjk_contamination');
   if (/[_*`#]/.test(r.summary || '')) errors.push('markdown_artifacts');
   return errors;
-}
-
-// 길이 초과 시 문장 경계(마침표)에서 안전하게 축약. 모델 재시도/검수로도 못 줄인 경우의 최종 안전장치.
-function truncateAtSentence(text, max) {
-  if (!text || text.length <= max) return text;
-  const slice = text.slice(0, max);
-  const lastPeriod = slice.lastIndexOf('.');
-  // 마지막 문장 종결(마침표) 뒤에서 자르되, 너무 짧아지면(절반 미만) 그냥 max에서 자름
-  if (lastPeriod > max * 0.5) return slice.slice(0, lastPeriod + 1);
-  return slice.trimEnd();
-}
-
-// title 전용: 명사구라 마침표가 없으므로 공백/쉼표/구분자 같은 단어 경계에서 자른다.
-// 단어나 조사가 중간에 끊기지 않게 하고, 잘렸음을 나타내는 말줄임표(…)를 붙인다.
-function truncateAtWord(text, max) {
-  if (!text || text.length <= max) return text;
-  const slice = text.slice(0, max - 1); // … 자리 확보
-  const m = slice.match(/^[\s\S]*[\s,、·/]/); // 마지막 공백/쉼표/구분자 위치
-  let head = (m && m[0].length > max * 0.5) ? m[0] : slice;
-  head = head.replace(/[\s,、·/]+$/, '').trimEnd();
-  return head + '…';
 }
 
 function normalizeStatus(status) {
@@ -231,11 +210,8 @@ export const handler = async (event) => {
         errors = validate(r);
       }
 
-      // 최종 안전장치: summary가 길면 문장 경계에서 축약 (DLQ 방지).
-      // title은 명사구라 중간 절단하면 의미가 깨지므로 자르지 않고, 초과 시 재시도로 다시 짧게 생성하게 둔다.
-      if (r.summary && r.summary.length > 200) r.summary = truncateAtSentence(r.summary, 200);
-      // title이 재시도 후에도 길면 단어 경계에서 안전 축약 (글자 중간 절단 대신 말줄임표)
-      if (r.title && r.title.length > 70) r.title = truncateAtWord(r.title, 60);
+      // 원문은 절대 자르지 않는다(잘림/말줄임표는 요약의 의미를 훼손). 표시 길이는 UI에서 처리.
+      // 길이 초과는 재시도로 모델이 다시 짧고 완결된 형태로 생성하게 하고, 검증 상한은 완결형 긴 문장도 통과하도록 넉넉히 둔다.
       errors = validate(r);
 
       // 최종 검증 실패 → SQS 재시도 (DLQ로 이동)
