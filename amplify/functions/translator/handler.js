@@ -81,7 +81,7 @@ const RULES = `<rules>
 - 제품명, 버전, 날짜, 리전 코드는 영어 유지
 - 그 외 모든 영어는 한국어로 번역. 혼용 금지 (예: "및" not "and 및")
 - AWS 표준 용어: instance→인스턴스, deploy→배포, serverless→서버리스
-- title: 제품명 + 변경 내용, 최대 40자. "출시" "지원"만 단독 사용 금지
+- title: 제품명 + 변경 내용, 최대 55자(절대 초과 금지). "출시" "지원"만 단독 사용 금지. 길이가 넘칠 것 같으면 부가 수식을 빼서 핵심만 담되, 단어나 조사가 중간에 잘리지 않도록 완결된 형태로 작성
 - summary: 한국어 2문장, 최대 150자(절대 200자 초과 금지). 첫째: 무엇이 변경. 둘째: 왜 중요. 길어지면 부가 설명을 덜어내고 핵심만 남길 것
 - status: "preview"→미리보기, "beta"→베타, "retired"→지원 종료, "GA"/"launched"→정식 출시
 - 버전 문자열의 "beta"/"preview"는 서비스 상태가 아님
@@ -160,7 +160,7 @@ async function invoke(modelId, system, messages) {
 function validate(r) {
   const errors = [];
   if (!r.title || r.title.length < 5) errors.push('title_short');
-  if (r.title && r.title.length > 60) errors.push('title_long');
+  if (r.title && r.title.length > 70) errors.push('title_long');
   if (!r.summary || r.summary.length < 10) errors.push('summary_short');
   if (r.summary && r.summary.length > 200) errors.push('summary_long');
   if (!r.target) errors.push('target_missing');
@@ -220,9 +220,9 @@ export const handler = async (event) => {
         errors = validate(r);
       }
 
-      // 최종 안전장치: 검수로도 못 줄인 길이 초과는 문장 경계에서 축약 (DLQ 방지)
+      // 최종 안전장치: summary가 길면 문장 경계에서 축약 (DLQ 방지).
+      // title은 명사구라 중간 절단하면 의미가 깨지므로 자르지 않고, 초과 시 재시도로 다시 짧게 생성하게 둔다.
       if (r.summary && r.summary.length > 200) r.summary = truncateAtSentence(r.summary, 200);
-      if (r.title && r.title.length > 60) r.title = truncateAtSentence(r.title, 60);
       errors = validate(r);
 
       // 최종 검증 실패 → SQS 재시도 (DLQ로 이동)
