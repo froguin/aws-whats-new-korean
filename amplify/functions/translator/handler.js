@@ -140,7 +140,7 @@ const FEW = [
 async function invoke(modelId, system, messages) {
   const r = await bedrock.send(new InvokeModelCommand({
     modelId, contentType: 'application/json', accept: 'application/json',
-    body: JSON.stringify({ schemaVersion: 'messages-v1', system: [{ text: system }], messages, inferenceConfig: { temperature: 0 } }),
+    body: JSON.stringify({ schemaVersion: 'messages-v1', system: [{ text: system }], messages, inferenceConfig: { temperature: 0, maxTokens: 600 } }),
   }));
   let t = JSON.parse(new TextDecoder().decode(r.body)).output?.message?.content?.[0]?.text || '';
   t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
@@ -162,7 +162,7 @@ function validate(r) {
   if (!r.title || r.title.length < 5) errors.push('title_short');
   if (r.title && r.title.length > 100) errors.push('title_long');
   if (!r.summary || r.summary.length < 10) errors.push('summary_short');
-  if (r.summary && r.summary.length > 300) errors.push('summary_long');
+  if (r.summary && r.summary.length > 250) errors.push('summary_long');
   if (!r.target) errors.push('target_missing');
   if (!r.features) errors.push('features_missing');
   const cjk = ((r.title || '') + (r.summary || '')).match(/[一-龥ぁ-ヿ]/g);
