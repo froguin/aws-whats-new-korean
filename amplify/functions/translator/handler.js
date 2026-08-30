@@ -82,7 +82,7 @@ const RULES = `<rules>
 - 그 외 모든 영어는 한국어로 번역. 혼용 금지 (예: "및" not "and 및")
 - AWS 표준 용어: instance→인스턴스, deploy→배포, serverless→서버리스
 - title: 제품명 + 변경 내용, 최대 40자. "출시" "지원"만 단독 사용 금지
-- summary: 한국어 2문장, 최대 150자. 첫째: 무엇이 변경. 둘째: 왜 중요
+- summary: 한국어 2문장, 최대 150자(절대 200자 초과 금지). 첫째: 무엇이 변경. 둘째: 왜 중요. 길어지면 부가 설명을 덜어내고 핵심만 남길 것
 - status: "preview"→미리보기, "beta"→베타, "retired"→지원 종료, "GA"/"launched"→정식 출시
 - 버전 문자열의 "beta"/"preview"는 서비스 상태가 아님
 - target: 한 문장, 최대 50자
@@ -128,7 +128,7 @@ const KOREAN_STYLE = `<korean-style>
 </korean-style>`;
 
 const SYS = `한국어 클라우드 뉴스 요약기. 출력: 유효한 JSON만. 마크다운/코드펜스 금지.\n${KOREAN_STYLE}\n${RULES}`;
-const REV = `한국어 클라우드 뉴스 카드 검수기. 아래 한국어 품질 지침과 규칙을 기준으로 위반 사항을 수정합니다.\n${KOREAN_STYLE}\n${RULES}\n<review-focus>\n- 조사/어미 누락: "기능 제공" → "기능을 제공합니다"처럼 완성된 문장인지 확인\n- 번역투 표현: "~에 대한", "~를 통해" 남용 여부 확인\n- 명사 나열: 서술어 없이 명사만 나열된 문장이 있으면 서술어를 보충\n- 의미 불분명: 주어나 목적어가 누락되어 뜻이 모호한 경우 보충\n</review-focus>\n<output>수정된 필드 JSON만. 정상이면: {"pass":true}</output>`;
+const REV = `한국어 클라우드 뉴스 카드 검수기. 아래 한국어 품질 지침과 규칙을 기준으로 위반 사항을 수정합니다.\n${KOREAN_STYLE}\n${RULES}\n<review-focus>\n- 조사/어미 누락: "기능 제공" → "기능을 제공합니다"처럼 완성된 문장인지 확인\n- 번역투 표현: "~에 대한", "~를 통해" 남용 여부 확인\n- 명사 나열: 서술어 없이 명사만 나열된 문장이 있으면 서술어를 보충\n- 의미 불분명: 주어나 목적어가 누락되어 뜻이 모호한 경우 보충\n- summary는 반드시 200자 이내로 유지. 초과 시 핵심만 남기고 축약\n</review-focus>\n<output>\n반드시 JSON 객체 하나만 출력합니다. 설명 문장, 머리말, 코드펜스를 절대 붙이지 않습니다. 응답은 반드시 '{' 로 시작해서 '}' 로 끝나야 합니다.\n수정할 필드가 있으면 그 필드만 담은 JSON을 출력합니다. 예: {"summary":"..."}\n수정할 것이 없으면 정확히 이것만 출력합니다: {"pass":true}\n</output>`;
 
 const FEW = [
   { role: 'user', content: [{ text: '<article>\nTitle: AWS Lambda now supports Python 3.13 runtime\nDescription: Customers can now create and update Lambda functions using Python 3.13. This runtime includes improved error messages and performance enhancements. Python 3.13 is available in all AWS Regions where Lambda is available.\n</article>' }] },
@@ -143,7 +143,18 @@ async function invoke(modelId, system, messages) {
     body: JSON.stringify({ schemaVersion: 'messages-v1', system: [{ text: system }], messages, inferenceConfig: { temperature: 0 } }),
   }));
   let t = JSON.parse(new TextDecoder().decode(r.body)).output?.message?.content?.[0]?.text || '';
-  return JSON.parse(t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim());
+  t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+  // 모델이 설명문을 덧붙이는 경우(예: "수정된 필드 JSON은..."), 첫 번째 완전한 JSON 객체만 추출
+  try {
+    return JSON.parse(t);
+  } catch {
+    const start = t.indexOf('{');
+    const end = t.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      return JSON.parse(t.slice(start, end + 1));
+    }
+    throw new Error('no_json_in_response');
+  }
 }
 
 function validate(r) {
@@ -158,6 +169,16 @@ function validate(r) {
   if (cjk && cjk.length >= 3) errors.push('cjk_contamination');
   if (/[_*`#]/.test(r.summary || '')) errors.push('markdown_artifacts');
   return errors;
+}
+
+// 길이 초과 시 문장 경계(마침표)에서 안전하게 축약. 모델 재시도/검수로도 못 줄인 경우의 최종 안전장치.
+function truncateAtSentence(text, max) {
+  if (!text || text.length <= max) return text;
+  const slice = text.slice(0, max);
+  const lastPeriod = slice.lastIndexOf('.');
+  // 마지막 문장 종결(마침표) 뒤에서 자르되, 너무 짧아지면(절반 미만) 그냥 max에서 자름
+  if (lastPeriod > max * 0.5) return slice.slice(0, lastPeriod + 1);
+  return slice.trimEnd();
 }
 
 function normalizeStatus(status) {
@@ -198,6 +219,11 @@ export const handler = async (event) => {
         } catch (e) { console.warn(`REVIEW_FAIL ${guid}:`, e.message); }
         errors = validate(r);
       }
+
+      // 최종 안전장치: 검수로도 못 줄인 길이 초과는 문장 경계에서 축약 (DLQ 방지)
+      if (r.summary && r.summary.length > 200) r.summary = truncateAtSentence(r.summary, 200);
+      if (r.title && r.title.length > 60) r.title = truncateAtSentence(r.title, 60);
+      errors = validate(r);
 
       // 최종 검증 실패 → SQS 재시도 (DLQ로 이동)
       if (errors.length > 0) {
