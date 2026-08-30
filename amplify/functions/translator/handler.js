@@ -102,6 +102,7 @@ const RULES = `<rules>
 const KOREAN_STYLE = `<korean-style>
 한국어 번역 품질 지침: 의미가 명확하고 자연스러운 한국어 문장을 출력해야 합니다.
 
+0. 【길이】 title은 목표 40자·최대 55자로 짧게, summary는 목표 2문장·150자로 간결하게 씁니다. 부가 설명·배경·수식·나열은 과감히 생략해 되도록 짧게 만듭니다. 다만 길이를 맞추려고 문장을 도중에 끊거나 의미를 훼손하지 말고, 말줄임표(…, ...)도 절대 쓰지 않으며, 항상 완결된 문장으로 마무리합니다. 정보가 많아 부득이 길어지더라도 완결성을 우선합니다.
 1. 조사와 어미를 생략하지 않습니다. 부사, 보조사, 보조 용언을 적극 활용하여 의미를 명확히 합니다.
    [기능 제공 시작 → 이 기능을 사용할 수 있게 되었습니다]
    [데이터 암호화 지원 → 데이터를 암호화하는 기능을 지원합니다]
@@ -140,7 +141,7 @@ const FEW = [
 async function invoke(modelId, system, messages) {
   const r = await bedrock.send(new InvokeModelCommand({
     modelId, contentType: 'application/json', accept: 'application/json',
-    body: JSON.stringify({ schemaVersion: 'messages-v1', system: [{ text: system }], messages, inferenceConfig: { temperature: 0, maxTokens: 600 } }),
+    body: JSON.stringify({ schemaVersion: 'messages-v1', system: [{ text: system }], messages, inferenceConfig: { temperature: 0, maxTokens: 1024 } }),
   }));
   let t = JSON.parse(new TextDecoder().decode(r.body)).output?.message?.content?.[0]?.text || '';
   t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
@@ -162,7 +163,7 @@ function validate(r) {
   if (!r.title || r.title.length < 5) errors.push('title_short');
   if (r.title && r.title.length > 100) errors.push('title_long');
   if (!r.summary || r.summary.length < 10) errors.push('summary_short');
-  if (r.summary && r.summary.length > 250) errors.push('summary_long');
+  if (r.summary && r.summary.length > 400) errors.push('summary_long');
   if (!r.target) errors.push('target_missing');
   if (!r.features) errors.push('features_missing');
   const cjk = ((r.title || '') + (r.summary || '')).match(/[一-龥ぁ-ヿ]/g);
