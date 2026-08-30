@@ -181,6 +181,17 @@ function truncateAtSentence(text, max) {
   return slice.trimEnd();
 }
 
+// title 전용: 명사구라 마침표가 없으므로 공백/쉼표/구분자 같은 단어 경계에서 자른다.
+// 단어나 조사가 중간에 끊기지 않게 하고, 잘렸음을 나타내는 말줄임표(…)를 붙인다.
+function truncateAtWord(text, max) {
+  if (!text || text.length <= max) return text;
+  const slice = text.slice(0, max - 1); // … 자리 확보
+  const m = slice.match(/^[\s\S]*[\s,、·/]/); // 마지막 공백/쉼표/구분자 위치
+  let head = (m && m[0].length > max * 0.5) ? m[0] : slice;
+  head = head.replace(/[\s,、·/]+$/, '').trimEnd();
+  return head + '…';
+}
+
 function normalizeStatus(status) {
   const raw = Array.isArray(status) ? status.join(', ') : String(status || '').trim();
   const s = raw.toLowerCase();
@@ -223,6 +234,8 @@ export const handler = async (event) => {
       // 최종 안전장치: summary가 길면 문장 경계에서 축약 (DLQ 방지).
       // title은 명사구라 중간 절단하면 의미가 깨지므로 자르지 않고, 초과 시 재시도로 다시 짧게 생성하게 둔다.
       if (r.summary && r.summary.length > 200) r.summary = truncateAtSentence(r.summary, 200);
+      // title이 재시도 후에도 길면 단어 경계에서 안전 축약 (글자 중간 절단 대신 말줄임표)
+      if (r.title && r.title.length > 70) r.title = truncateAtWord(r.title, 60);
       errors = validate(r);
 
       // 최종 검증 실패 → SQS 재시도 (DLQ로 이동)
