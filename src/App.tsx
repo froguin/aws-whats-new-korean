@@ -263,6 +263,19 @@ export default function App() {
       if (query.tokens.length > 0) {
         result = result.filter(item => {
           const checks = query.tokens.map((token: any) => {
+            const t = (token.value || '').toLowerCase();
+
+            // Free-text token (no property selected): search across all text fields
+            if (!token.propertyKey) {
+              if (!t) return true;
+              const haystack = [
+                item.title, item.titleEn, getSummary(item.summary),
+                item.features, item.target, item.regions,
+              ].filter(Boolean).join(' ').toLowerCase();
+              const matched = haystack.includes(t);
+              return token.operator === '!=' ? !matched : matched;
+            }
+
             let value = '';
             if (token.propertyKey === 'status') value = getStatusLabel(item.status);
             else if (token.propertyKey === 'target') value = item.target || '';
@@ -271,7 +284,6 @@ export default function App() {
             else return true;
 
             const v = value.toLowerCase();
-            const t = (token.value || '').toLowerCase();
             if (token.operator === '=') return v === t;
             if (token.operator === '!=') return v !== t;
             if (token.operator === ':') return v.includes(t);
@@ -503,11 +515,11 @@ export default function App() {
           onChange={({ detail }) => { setQuery(detail); setPage(1); }}
           filteringProperties={FILTERING_PROPERTIES}
           filteringOptions={filteringOptions}
-          filteringPlaceholder="상태, 대상, 리전으로 필터링"
+          filteringPlaceholder="키워드 검색 또는 상태·대상·리전 필터"
           filteringAriaLabel="릴리스 노트 필터"
           i18nStrings={{
             filteringAriaLabel: '릴리스 노트 필터',
-            filteringPlaceholder: '상태, 대상, 리전으로 필터링',
+            filteringPlaceholder: '키워드 검색 또는 상태·대상·리전 필터',
             groupValuesText: '값',
             groupPropertiesText: '속성',
             operatorsText: '연산자',
