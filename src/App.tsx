@@ -4,7 +4,7 @@ import {
   SpaceBetween, Link, Pagination, StatusIndicator,
   TopNavigation, Button, Header, PropertyFilter, Badge,
   CollectionPreferences, ColumnLayout, KeyValuePairs, Flashbar,
-  Popover, Icon, TextFilter,
+  Popover, Icon,
 } from '@cloudscape-design/components';
 import { applyMode, Mode } from '@cloudscape-design/global-styles';
 
@@ -184,9 +184,6 @@ export default function App() {
   });
   const pageSize = isMobile ? 15 : preferences.pageSize;
 
-  // Mobile filter text (simple)
-  const [filterText, setFilterText] = useState('');
-
   const [dark, setDark] = useState(() => {
     const saved = localStorage.getItem('theme');
     return saved ? saved === 'dark' : matchMedia('(prefers-color-scheme:dark)').matches;
@@ -245,53 +242,42 @@ export default function App() {
   }, [selectedItems]);
 
   // ── Filtering ──
+  // PropertyFilter는 element query 기반으로 좁은 화면에서도 스스로 반응형 렌더링하므로,
+  // PC/모바일 모두 동일한 query(PropertyFilter) 기반 필터 로직을 사용한다.
   const filtered = useMemo(() => {
     let result = items;
 
-    if (isMobile) {
-      // Mobile: simple text filter
-      if (filterText) {
-        const q = filterText.toLowerCase();
-        result = result.filter(a =>
-          (a.title || '').toLowerCase().includes(q) ||
-          (a.titleEn || '').toLowerCase().includes(q) ||
-          getSummary(a.summary).toLowerCase().includes(q)
-        );
-      }
-    } else {
-      // PC: PropertyFilter
-      if (query.tokens.length > 0) {
-        result = result.filter(item => {
-          const checks = query.tokens.map((token: any) => {
-            const t = (token.value || '').toLowerCase();
+    if (query.tokens.length > 0) {
+      result = result.filter(item => {
+        const checks = query.tokens.map((token: any) => {
+          const t = (token.value || '').toLowerCase();
 
-            // Free-text token (no property selected): search across all text fields
-            if (!token.propertyKey) {
-              if (!t) return true;
-              const haystack = [
-                item.title, item.titleEn, getSummary(item.summary),
-                item.features, item.target, item.regions,
-              ].filter(Boolean).join(' ').toLowerCase();
-              const matched = haystack.includes(t);
-              return token.operator === '!=' ? !matched : matched;
-            }
+          // Free-text token (no property selected): search across all text fields
+          if (!token.propertyKey) {
+            if (!t) return true;
+            const haystack = [
+              item.title, item.titleEn, getSummary(item.summary),
+              item.features, item.target, item.regions,
+            ].filter(Boolean).join(' ').toLowerCase();
+            const matched = haystack.includes(t);
+            return token.operator === '!=' ? !matched : matched;
+          }
 
-            let value = '';
-            if (token.propertyKey === 'status') value = getStatusLabel(item.status);
-            else if (token.propertyKey === 'target') value = item.target || '';
-            else if (token.propertyKey === 'regions') value = item.regions || '';
-            else if (token.propertyKey === 'title') value = `${item.title} ${item.titleEn}`;
-            else return true;
+          let value = '';
+          if (token.propertyKey === 'status') value = getStatusLabel(item.status);
+          else if (token.propertyKey === 'target') value = item.target || '';
+          else if (token.propertyKey === 'regions') value = item.regions || '';
+          else if (token.propertyKey === 'title') value = `${item.title} ${item.titleEn}`;
+          else return true;
 
-            const v = value.toLowerCase();
-            if (token.operator === '=') return v === t;
-            if (token.operator === '!=') return v !== t;
-            if (token.operator === ':') return v.includes(t);
-            return true;
-          });
-          return query.operation === 'and' ? checks.every(Boolean) : checks.some(Boolean);
+          const v = value.toLowerCase();
+          if (token.operator === '=') return v === t;
+          if (token.operator === '!=') return v !== t;
+          if (token.operator === ':') return v.includes(t);
+          return true;
         });
-      }
+        return query.operation === 'and' ? checks.every(Boolean) : checks.some(Boolean);
+      });
     }
 
     // Sort
@@ -303,7 +289,7 @@ export default function App() {
       return sortingDescending ? vb.localeCompare(va) : va.localeCompare(vb);
     });
     return result;
-  }, [items, query, filterText, isMobile, sortingColumn, sortingDescending]);
+  }, [items, query, sortingColumn, sortingDescending]);
 
   const paged = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page, pageSize]);
   const detail = selectedItems[0];
@@ -383,8 +369,8 @@ export default function App() {
   );
 
   // ── Empty state ──
-  const hasFilter = isMobile ? !!filterText : query.tokens.length > 0;
-  const clearFilter = () => { if (isMobile) { setFilterText(''); } else { setQuery({ tokens: [], operation: 'and' }); } setPage(1); };
+  const hasFilter = query.tokens.length > 0;
+  const clearFilter = () => { setQuery({ tokens: [], operation: 'and' }); setPage(1); };
   const emptyContent = error ? (
     <Box textAlign="center" padding="l">
       <Alert type="error" action={<Button onClick={() => fetchArticles()} iconName="refresh">다시 시도</Button>}>{error}</Alert>
@@ -431,6 +417,46 @@ export default function App() {
     [preferences.visibleContent]
   );
 
+  // ── Shared PropertyFilter (PC + Mobile) ──
+  // Cloudscape PropertyFilter는 element query로 좁은 화면에서도 스스로 반응형 렌더링하므로
+  // PC/모바일 공용으로 사용한다. (필드 추천 드롭다운 + free-text 키워드 + 필드별 필터 모두 유지)
+  const propertyFilterEl = (
+    <PropertyFilter
+      query={query}
+      onChange={({ detail }) => { setQuery(detail); setPage(1); }}
+      filteringProperties={FILTERING_PROPERTIES}
+      filteringOptions={filteringOptions}
+      filteringPlaceholder="키워드 검색 또는 상태·대상·리전 필터"
+      filteringAriaLabel="릴리스 노트 필터"
+      i18nStrings={{
+        filteringAriaLabel: '릴리스 노트 필터',
+        filteringPlaceholder: '키워드 검색 또는 상태·대상·리전 필터',
+        groupValuesText: '값',
+        groupPropertiesText: '속성',
+        operatorsText: '연산자',
+        operationAndText: '그리고',
+        operationOrText: '또는',
+        operatorLessText: '미만',
+        operatorLessOrEqualText: '이하',
+        operatorGreaterText: '초과',
+        operatorGreaterOrEqualText: '이상',
+        operatorContainsText: '포함',
+        operatorDoesNotContainText: '미포함',
+        operatorEqualsText: '같음',
+        operatorDoesNotEqualText: '다름',
+        editTokenHeader: '필터 편집',
+        propertyText: '속성',
+        operatorText: '연산자',
+        valueText: '값',
+        cancelActionText: '취소',
+        applyActionText: '적용',
+        clearFiltersText: '필터 지우기',
+        removeTokenButtonAriaLabel: (token) => `${token.propertyLabel} ${token.operator} ${token.value} 제거`,
+        enteredTextLabel: (text) => `"${text}" 사용`,
+      }}
+    />
+  );
+
   // ── Mobile detail (full screen) ──
   const mobileDetail = detail ? (
     <SpaceBetween size="l">
@@ -467,14 +493,7 @@ export default function App() {
       loading={loading} loadingText="업데이트를 불러오는 중..."
       items={paged} trackBy="id"
       header={headerEl}
-      filter={
-        <TextFilter
-          filteringText={filterText}
-          filteringPlaceholder="제목, 서비스명으로 검색"
-          filteringAriaLabel="업데이트 검색"
-          onChange={({ detail }) => { setFilterText(detail.filteringText); setPage(1); }}
-        />
-      }
+      filter={propertyFilterEl}
       pagination={paginationEl}
       ariaLabels={{ itemSelectionLabel: (_d, item) => (item as Article).title, selectionGroupLabel: '기사 선택' }}
       cardDefinition={{
@@ -509,42 +528,7 @@ export default function App() {
       variant="full-page"
       ariaLabels={{ itemSelectionLabel: (_d, item) => (item as Article).title, selectionGroupLabel: '기사 선택', tableLabel: 'AWS 릴리스 노트 목록' }}
       header={headerEl}
-      filter={
-        <PropertyFilter
-          query={query}
-          onChange={({ detail }) => { setQuery(detail); setPage(1); }}
-          filteringProperties={FILTERING_PROPERTIES}
-          filteringOptions={filteringOptions}
-          filteringPlaceholder="키워드 검색 또는 상태·대상·리전 필터"
-          filteringAriaLabel="릴리스 노트 필터"
-          i18nStrings={{
-            filteringAriaLabel: '릴리스 노트 필터',
-            filteringPlaceholder: '키워드 검색 또는 상태·대상·리전 필터',
-            groupValuesText: '값',
-            groupPropertiesText: '속성',
-            operatorsText: '연산자',
-            operationAndText: '그리고',
-            operationOrText: '또는',
-            operatorLessText: '미만',
-            operatorLessOrEqualText: '이하',
-            operatorGreaterText: '초과',
-            operatorGreaterOrEqualText: '이상',
-            operatorContainsText: '포함',
-            operatorDoesNotContainText: '미포함',
-            operatorEqualsText: '같음',
-            operatorDoesNotEqualText: '다름',
-            editTokenHeader: '필터 편집',
-            propertyText: '속성',
-            operatorText: '연산자',
-            valueText: '값',
-            cancelActionText: '취소',
-            applyActionText: '적용',
-            clearFiltersText: '필터 지우기',
-            removeTokenButtonAriaLabel: (token) => `${token.propertyLabel} ${token.operator} ${token.value} 제거`,
-            enteredTextLabel: (text) => `"${text}" 사용`,
-          }}
-        />
-      }
+      filter={propertyFilterEl}
       pagination={paginationEl}
       preferences={
         <CollectionPreferences
