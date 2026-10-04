@@ -7,7 +7,7 @@ backend:
           CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "amplify/")
           if echo "$CHANGED" | grep -qE '^(amplify/|package)'; then
             echo "백엔드 변경 감지, 배포 진행"
-            npm install
+            npm ci || npm install
             npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
           else
             echo "백엔드 변경 없음, 스킵"
@@ -16,7 +16,7 @@ frontend:
   phases:
     preBuild:
       commands:
-        - npm install
+        - npm ci || npm install
     build:
       commands:
         - |

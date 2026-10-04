@@ -1,11 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  AppLayout, Table, Cards, Box, SplitPanel, Alert,
-  SpaceBetween, Link, Pagination, StatusIndicator,
-  TopNavigation, Button, Header, PropertyFilter, Badge,
-  CollectionPreferences, ColumnLayout, KeyValuePairs, Flashbar,
-  Popover, Icon, TextFilter,
-} from '@cloudscape-design/components';
+import AppLayout from '@cloudscape-design/components/app-layout';
+import Table from '@cloudscape-design/components/table';
+import Cards from '@cloudscape-design/components/cards';
+import Box from '@cloudscape-design/components/box';
+import SplitPanel from '@cloudscape-design/components/split-panel';
+import Alert from '@cloudscape-design/components/alert';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import Link from '@cloudscape-design/components/link';
+import Pagination from '@cloudscape-design/components/pagination';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import TopNavigation from '@cloudscape-design/components/top-navigation';
+import Button from '@cloudscape-design/components/button';
+import Header from '@cloudscape-design/components/header';
+import PropertyFilter from '@cloudscape-design/components/property-filter';
+import Badge from '@cloudscape-design/components/badge';
+import CollectionPreferences from '@cloudscape-design/components/collection-preferences';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
+import Flashbar from '@cloudscape-design/components/flashbar';
+import Popover from '@cloudscape-design/components/popover';
+import TextFilter from '@cloudscape-design/components/text-filter';
 import { applyMode, Mode } from '@cloudscape-design/global-styles';
 
 const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
