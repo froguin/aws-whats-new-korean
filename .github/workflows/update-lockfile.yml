@@ -1,0 +1,55 @@
+name: Update lockfile
+
+# package.json이 바뀌면 네트워크가 열린 CI에서 package-lock.json을 재생성하고,
+# 빌드로 검증한 뒤 변경이 있으면 같은 브랜치에 커밋·푸시한다.
+# (로컬 개발 환경에서 npm 레지스트리 접근이 막혀 lock을 생성할 수 없는 경우를 위한 자동화)
+
+on:
+  workflow_dispatch: {}
+  push:
+    paths:
+      - 'package.json'
+      - '.github/workflows/update-lockfile.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-lockfile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  update-lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # push 권한으로 체크아웃 (기본 GITHUB_TOKEN 사용)
+          persist-credentials: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies (regenerate lockfile)
+        run: npm install
+
+      - name: Verify build
+        env:
+          # 빌드 시 API_URL 미설정이어도 타입 체크·번들링은 통과해야 한다
+          VITE_API_URL: ''
+        run: npm run build
+
+      - name: Commit updated lockfile
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json 변경 없음, 커밋 스킵"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: package-lock.json 갱신 (CI 자동 생성)"
+          git push origin HEAD:${{ github.ref_name }}
