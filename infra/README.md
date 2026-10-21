@@ -117,7 +117,7 @@ After it, re-add the host name to the old resource and revert the DNS records.
 
 Each repo needs a GitHub Actions deploy workflow (build -> `aws s3 sync` -> `create-invalidation`)
 using the `DeployRoleArn` stack output via OIDC; bedrock-compare already has one. These workflows
-are not written yet. release builds to `dist` and also needs `VITE_API_URL` / `VITE_RUM_IDENTITY_POOL_ID`
+are not written yet. release builds to `dist` and needs the `VITE_API_URL` build variable
 (today they come from Amplify's `amplify_outputs.json`).
 
 ## Known unknowns
