@@ -163,12 +163,13 @@ function validate(r) {
   if (!r.title || r.title.length < 5) errors.push('title_short');
   if (r.title && r.title.length > 100) errors.push('title_long');
   if (!r.summary || r.summary.length < 10) errors.push('summary_short');
-  if (r.summary && r.summary.length > 400) errors.push('summary_long');
+  if (r.summary && r.summary.length > 600) errors.push('summary_long');
   if (!r.target) errors.push('target_missing');
   if (!r.features) errors.push('features_missing');
   const cjk = ((r.title || '') + (r.summary || '')).match(/[一-龥ぁ-ヿ]/g);
   if (cjk && cjk.length >= 3) errors.push('cjk_contamination');
-  if (/[_*`#]/.test(r.summary || '')) errors.push('markdown_artifacts');
+  // 진짜 마크다운(굵게, 인라인 코드, 제목, 글머리표)만 막는다. ssl_groups, AT_TIMESTAMP, app=payments-* 같은 식별자는 정상이다.
+  if (/\*\*[^*]+\*\*|`[^`]*`|^#{1,6}\s|^\s*[-*]\s/m.test(r.summary || '')) errors.push('markdown_artifacts');
   return errors;
 }
 
@@ -186,8 +187,11 @@ function normalizeStatus(status) {
 export const handler = async (event) => {
   for (const rec of event.Records) {
     const { guid, url, title, description } = JSON.parse(rec.body);
+    // 설명이 1,800자를 넘으면 모델이 요약 대신 본문을 늘어놓다가 maxTokens에서 잘려 JSON이 깨진다(no_json_in_response).
+    // 모델 입력만 1,000자로 줄인다. 리전 추출(extractRegionsFromText)은 아래에서 원문 전체를 그대로 쓴다.
+    const modelDescription = String(description || '').slice(0, 1000);
     try {
-      const userText = `<article>\nTitle: ${title}\nDescription: ${description}\n</article>`;
+      const userText = `<article>\nTitle: ${title}\nDescription: ${modelDescription}\n</article>`;
       const msg = [...FEW, { role: 'user', content: [{ text: userText }] }];
 
       // 1차 번역 (Nova Lite)
@@ -205,7 +209,7 @@ export const handler = async (event) => {
       if (errors.length > 0) {
         console.log(`REVIEW ${guid}: ${errors.join(',')}`);
         try {
-          const rev = await invoke(REVIEW_MODEL, REV, [{ role: 'user', content: [{ text: `<original>\nTitle: ${title}\nDescription: ${description}\n</original>\n<translated>\n${JSON.stringify(r)}\n</translated>\n<errors>${errors.join(',')}</errors>` }] }]);
+          const rev = await invoke(REVIEW_MODEL, REV, [{ role: 'user', content: [{ text: `<original>\nTitle: ${title}\nDescription: ${modelDescription}\n</original>\n<translated>\n${JSON.stringify(r)}\n</translated>\n<errors>${errors.join(',')}</errors>` }] }]);
           if (!rev.pass) r = { ...r, ...rev, pass: undefined };
         } catch (e) { console.warn(`REVIEW_FAIL ${guid}:`, e.message); }
         errors = validate(r);
