@@ -1,0 +1,394 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  release.awskr.net data pipeline without Amplify: DynamoDB (provisioned, inside the always-free
+  25 RCU / 25 WCU allowance), SQS, four Lambda functions, a 15-minute EventBridge schedule and an
+  HTTP API. Same code as amplify/functions/*; deploy in ap-northeast-2. Replaces the Amplify Gen2
+  stack amplify-d27cqsuosbietu-main-branch-* (see README.md for the migration order).
+
+Parameters:
+  ArtifactBucket:
+    Type: String
+    Description: Bucket that holds the zipped functions (stack awskr-backend-artifacts).
+  ArtifactPrefix:
+    Type: String
+    Description: Key prefix of this build's zips, printed by package.sh (a content hash).
+  AllowedOrigins:
+    Type: CommaDelimitedList
+    Default: 'https://release.awskr.net,http://localhost:5173'
+    Description: CORS origins of the public API.
+  ScheduleState:
+    Type: String
+    AllowedValues: [ENABLED, DISABLED]
+    Default: DISABLED
+    Description: Keep DISABLED until the old Amplify stack's schedule is switched off (avoids double collection).
+  TableReadCapacity:
+    Type: Number
+    Default: 10
+  TableWriteCapacity:
+    Type: Number
+    Default: 10
+  IndexReadCapacity:
+    Type: Number
+    Default: 10
+  IndexWriteCapacity:
+    Type: Number
+    Default: 10
+  TranslateModel:
+    Type: String
+    Default: apac.amazon.nova-lite-v1:0
+  ReviewModel:
+    Type: String
+    Default: apac.amazon.nova-micro-v1:0
+  ApiRateLimit:
+    Type: Number
+    Default: 20
+    Description: Steady requests per second allowed on the public API (cost guard; the API has no WAF).
+  ApiBurstLimit:
+    Type: Number
+    Default: 40
+
+Resources:
+  # ---------------------------------------------------------------- data
+  Articles:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: !Ref TableReadCapacity
+        WriteCapacityUnits: !Ref TableWriteCapacity
+      AttributeDefinitions:
+        - { AttributeName: pk, AttributeType: S }
+        - { AttributeName: sk, AttributeType: S }
+        - { AttributeName: gsi1pk, AttributeType: S }
+        - { AttributeName: gsi1sk, AttributeType: S }
+      KeySchema:
+        - { AttributeName: pk, KeyType: HASH }
+        - { AttributeName: sk, KeyType: RANGE }
+      GlobalSecondaryIndexes:
+        - IndexName: gsi1
+          KeySchema:
+            - { AttributeName: gsi1pk, KeyType: HASH }
+            - { AttributeName: gsi1sk, KeyType: RANGE }
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: !Ref IndexReadCapacity
+            WriteCapacityUnits: !Ref IndexWriteCapacity
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  TranslationDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 604800
+
+  TranslationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 600
+      MessageRetentionPeriod: 86400
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TranslationDLQ.Arn
+        maxReceiveCount: 3
+
+  RegionResolverQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 86400
+
+  # ---------------------------------------------------------------- log groups (bounded retention)
+  RssCollectorLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-rss-collector'
+      RetentionInDays: 14
+  TranslatorLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-translator'
+      RetentionInDays: 14
+  RegionResolverLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-region-resolver'
+      RetentionInDays: 14
+  ApiLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-api'
+      RetentionInDays: 14
+
+  # ---------------------------------------------------------------- roles (least privilege per function)
+  RssCollectorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - { Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: 'sts:AssumeRole' }
+      Policies:
+        - PolicyName: run
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ['logs:CreateLogStream', 'logs:PutLogEvents']
+                Resource: !GetAtt RssCollectorLogs.Arn
+              - Effect: Allow
+                Action: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Query']
+                Resource: [!GetAtt Articles.Arn, !Sub '${Articles.Arn}/index/*']
+              - Effect: Allow
+                Action: 'sqs:SendMessage'
+                Resource: !GetAtt TranslationQueue.Arn
+
+  TranslatorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - { Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: 'sts:AssumeRole' }
+      Policies:
+        - PolicyName: run
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ['logs:CreateLogStream', 'logs:PutLogEvents']
+                Resource: !GetAtt TranslatorLogs.Arn
+              - Effect: Allow
+                Action: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Query']
+                Resource: [!GetAtt Articles.Arn, !Sub '${Articles.Arn}/index/*']
+              - Effect: Allow
+                Action: ['sqs:ReceiveMessage', 'sqs:DeleteMessage', 'sqs:GetQueueAttributes', 'sqs:ChangeMessageVisibility']
+                Resource: !GetAtt TranslationQueue.Arn
+              - Effect: Allow
+                Action: 'sqs:SendMessage'
+                Resource: !GetAtt RegionResolverQueue.Arn
+              - Effect: Allow
+                Action: 'bedrock:InvokeModel'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/apac.amazon.*'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-*'
+
+  RegionResolverRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - { Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: 'sts:AssumeRole' }
+      Policies:
+        - PolicyName: run
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ['logs:CreateLogStream', 'logs:PutLogEvents']
+                Resource: !GetAtt RegionResolverLogs.Arn
+              - Effect: Allow
+                Action: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Query']
+                Resource: [!GetAtt Articles.Arn, !Sub '${Articles.Arn}/index/*']
+              - Effect: Allow
+                Action: ['sqs:ReceiveMessage', 'sqs:DeleteMessage', 'sqs:GetQueueAttributes', 'sqs:ChangeMessageVisibility']
+                Resource: !GetAtt RegionResolverQueue.Arn
+              - Effect: Allow
+                Action: 'ssm:GetParametersByPath'
+                Resource: !Sub 'arn:${AWS::Partition}:ssm:us-east-1::parameter/aws/service/global-infrastructure/*'
+
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - { Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: 'sts:AssumeRole' }
+      Policies:
+        - PolicyName: run
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ['logs:CreateLogStream', 'logs:PutLogEvents']
+                Resource: !GetAtt ApiLogs.Arn
+              - Effect: Allow
+                Action: ['dynamodb:GetItem', 'dynamodb:Query']
+                Resource: [!GetAtt Articles.Arn, !Sub '${Articles.Arn}/index/*']
+
+  # ---------------------------------------------------------------- functions
+  RssCollector:
+    Type: AWS::Lambda::Function
+    DependsOn: RssCollectorLogs
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-rss-collector'
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      Handler: index.handler
+      Role: !GetAtt RssCollectorRole.Arn
+      Timeout: 300
+      MemorySize: 256
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Sub '${ArtifactPrefix}/rss-collector.zip'
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref Articles
+          QUEUE_URL: !Ref TranslationQueue
+
+  Translator:
+    Type: AWS::Lambda::Function
+    DependsOn: TranslatorLogs
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-translator'
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      Handler: index.handler
+      Role: !GetAtt TranslatorRole.Arn
+      Timeout: 600
+      MemorySize: 512
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Sub '${ArtifactPrefix}/translator.zip'
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref Articles
+          BEDROCK_TRANSLATE_MODEL: !Ref TranslateModel
+          BEDROCK_REVIEW_MODEL: !Ref ReviewModel
+          REGION_RESOLVER_QUEUE_URL: !Ref RegionResolverQueue
+
+  RegionResolver:
+    Type: AWS::Lambda::Function
+    DependsOn: RegionResolverLogs
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-region-resolver'
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      Handler: index.handler
+      Role: !GetAtt RegionResolverRole.Arn
+      Timeout: 120
+      MemorySize: 256
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Sub '${ArtifactPrefix}/region-resolver.zip'
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref Articles
+
+  Api:
+    Type: AWS::Lambda::Function
+    DependsOn: ApiLogs
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-api'
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      Handler: index.handler
+      Role: !GetAtt ApiRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      ReservedConcurrentExecutions: 5
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Sub '${ArtifactPrefix}/api.zip'
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref Articles
+
+  # ---------------------------------------------------------------- triggers
+  TranslatorFromQueue:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt TranslationQueue.Arn
+      FunctionName: !Ref Translator
+      BatchSize: 1
+
+  RegionResolverFromQueue:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt RegionResolverQueue.Arn
+      FunctionName: !Ref RegionResolver
+      BatchSize: 5
+
+  RssSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Collect AWS What's New feeds every 15 minutes
+      ScheduleExpression: rate(15 minutes)
+      State: !Ref ScheduleState
+      Targets:
+        - Id: rss-collector
+          Arn: !GetAtt RssCollector.Arn
+
+  RssSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref RssCollector
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt RssSchedule.Arn
+
+  # ---------------------------------------------------------------- public API
+  PublicApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-public-api'
+      Description: AWS Whats New Korean - Public API
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins: !Ref AllowedOrigins
+        AllowMethods: [GET]
+        AllowHeaders: [Content-Type]
+
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref PublicApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt Api.Arn
+      PayloadFormatVersion: '2.0'
+
+  ArticlesRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref PublicApi
+      RouteKey: 'GET /articles'
+      Target: !Sub 'integrations/${ApiIntegration}'
+
+  StatsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref PublicApi
+      RouteKey: 'GET /stats'
+      Target: !Sub 'integrations/${ApiIntegration}'
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref PublicApi
+      StageName: $default
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingRateLimit: !Ref ApiRateLimit
+        ThrottlingBurstLimit: !Ref ApiBurstLimit
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref Api
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${PublicApi}/*/*'
+
+Outputs:
+  ApiUrl:
+    Description: Value for the VITE_API_URL repository variable after the cutover.
+    Value: !GetAtt PublicApi.ApiEndpoint
+  TableName:
+    Value: !Ref Articles
+  TranslationQueueUrl:
+    Value: !Ref TranslationQueue
+  RegionResolverQueueUrl:
+    Value: !Ref RegionResolverQueue
