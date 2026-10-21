@@ -1,0 +1,389 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  awskr.net static site: private S3 origin (OAC) + CloudFront + dedicated WAF web ACL
+  + CloudFront flat-rate (FREE) plan subscription. Deploy in us-east-1
+  (CLOUDFRONT-scope web ACL). One stack per site; this file is identical in every
+  site repo (infra/site/template.yaml). Note: a flat-rate plan needs its own web ACL
+  and CloudFront function per distribution, so nothing here is shared between sites.
+
+Parameters:
+  SiteName:
+    Type: String
+    Description: Lowercase slug used in resource names (e.g. kiro-handbook).
+    AllowedPattern: '^[a-z0-9][a-z0-9-]{1,40}$'
+  DomainName:
+    Type: String
+    Description: Site host name (e.g. kiro.awskr.net).
+  ExtraDomainName:
+    Type: String
+    Default: ''
+    Description: Optional second host name for the same site (e.g. amazon-quick.awskr.net).
+  AttachAlias:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+    Description: >-
+      Set false while the host name is still held by another CloudFront distribution
+      (e.g. Amplify) so the stack can be created and tested on its cloudfront.net name first.
+  CertificateArn:
+    Type: String
+    Description: us-east-1 ACM certificate covering DomainName (the *.awskr.net wildcard).
+  HostedZoneId:
+    Type: String
+    Default: Z01517412DUMQ2XQU1189
+  ManageDnsRecords:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+    Description: >-
+      Create the A/AAAA alias records. Keep false for existing host names
+      (a CNAME must be swapped atomically with route53 change-resource-record-sets, see README).
+  CreateBucket:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+    Description: false = use an existing bucket (its bucket policy is then managed outside this stack).
+  BucketName:
+    Type: String
+  BucketRegion:
+    Type: String
+    Default: us-east-1
+    Description: Region of an existing bucket (ignored when CreateBucket=true).
+  UrlMode:
+    Type: String
+    AllowedValues: [spa, directory, precompressed]
+    Default: spa
+    Description: >-
+      spa = 403/404 return /index.html (200). directory = append index.html to folder URLs
+      (VitePress), 404 returns /404.html. precompressed = spa plus Accept-Encoding based
+      selection of index.html.br / index.html.gz (bedrock-compare).
+  RateLimit:
+    Type: Number
+    Default: 1000
+    MinValue: 10
+    Description: Max requests per IP per 5 minutes (a page load can be 20-40 requests with assets).
+  RateLimitAction:
+    Type: String
+    AllowedValues: [Block, Count]
+    Default: Block
+  GitHubSubject:
+    Type: String
+    Default: ''
+    Description: >-
+      OIDC subject allowed to deploy (e.g. repo:froguin/kiro-handbook:ref:refs/heads/main).
+      Empty = do not create a deploy role.
+
+Conditions:
+  HasAlias: !Equals [!Ref AttachAlias, 'true']
+  CreateDns: !And [!Equals [!Ref ManageDnsRecords, 'true'], !Equals [!Ref AttachAlias, 'true']]
+  HasExtraAlias: !And [!Equals [!Ref AttachAlias, 'true'], !Not [!Equals [!Ref ExtraDomainName, '']]]
+  CreateExtraDns: !And [!Equals [!Ref ManageDnsRecords, 'true'], !Condition HasExtraAlias]
+  NewBucket: !Equals [!Ref CreateBucket, 'true']
+  IsSpa: !Not [!Equals [!Ref UrlMode, directory]]
+  IsDirectory: !Equals [!Ref UrlMode, directory]
+  IsPrecompressed: !Equals [!Ref UrlMode, precompressed]
+  RateBlocks: !Equals [!Ref RateLimitAction, Block]
+  CreateDeployRole: !Not [!Equals [!Ref GitHubSubject, '']]
+
+Resources:
+  # ---------------------------------------------------------------- storage
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Condition: NewBucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: NewBucket
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipalReadOnly
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub 'arn:${AWS::Partition}:s3:::${BucketName}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}'
+
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${SiteName}-oac'
+        Description: !Sub 'OAC for ${SiteName}'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # ---------------------------------------------------------------- edge function
+  ViewerRequestFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub '${SiteName}-viewer-request'
+      AutoPublish: true
+      FunctionConfig:
+        Comment: !Sub 'URL handling for ${SiteName} (${UrlMode})'
+        Runtime: cloudfront-js-2.0
+      FunctionCode: !If
+        - IsPrecompressed
+        - |
+          // Serve the pre-compressed copy of the page matching Accept-Encoding.
+          function handler(event) {
+            var req = event.request;
+            if (req.uri === "/" || req.uri === "/index.html") {
+              var h = req.headers["accept-encoding"];
+              var ae = h ? h.value : "";
+              if (/(^|[\s,])br($|[\s,;])/.test(ae)) req.uri = "/index.html.br";
+              else if (/(^|[\s,])gzip($|[\s,;])/.test(ae)) req.uri = "/index.html.gz";
+              else req.uri = "/index.html";
+            }
+            return req;
+          }
+        - !If
+          - IsDirectory
+          - |
+            // Folder style URLs: /guide/ and /guide -> /guide/index.html
+            function handler(event) {
+              var req = event.request;
+              var uri = req.uri;
+              if (uri.endsWith("/")) {
+                req.uri = uri + "index.html";
+              } else if (uri.indexOf(".", uri.lastIndexOf("/")) === -1) {
+                req.uri = uri + "/index.html";
+              }
+              return req;
+            }
+          - |
+            // SPA: nothing to rewrite, error responses return /index.html
+            function handler(event) {
+              return event.request;
+            }
+
+  # ---------------------------------------------------------------- WAF
+  WebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub '${SiteName}-web-acl'
+      Scope: CLOUDFRONT
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub '${SiteName}-web-acl'
+      Rules:
+        - Name: rate-limit-per-ip
+          Priority: 0
+          Action: !If
+            - RateBlocks
+            - Block: {}
+            - Count: {}
+          Statement:
+            RateBasedStatement:
+              Limit: !Ref RateLimit
+              EvaluationWindowSec: 300
+              AggregateKeyType: IP
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub '${SiteName}-rate-limit'
+        - Name: aws-ip-reputation
+          Priority: 1
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAmazonIpReputationList
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub '${SiteName}-ip-reputation'
+
+  # ---------------------------------------------------------------- CDN
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: !Sub 'awskr.net ${SiteName} (static)'
+        Enabled: true
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_All
+        DefaultRootObject: index.html
+        WebACLId: !GetAtt WebAcl.Arn
+        Aliases: !If
+          - HasExtraAlias
+          - [!Ref DomainName, !Ref ExtraDomainName]
+          - !If
+            - HasAlias
+            - [!Ref DomainName]
+            - !Ref AWS::NoValue
+        ViewerCertificate: !If
+          - HasAlias
+          - AcmCertificateArn: !Ref CertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+        Origins:
+          - Id: site-s3
+            DomainName: !If
+              - NewBucket
+              - !Sub '${BucketName}.s3.${AWS::Region}.amazonaws.com'
+              - !Sub '${BucketName}.s3.${BucketRegion}.amazonaws.com'
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: site-s3
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # Managed-CachingOptimized
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt ViewerRequestFunction.FunctionARN
+        CustomErrorResponses: !If
+          - IsSpa
+          - - ErrorCode: 403
+              ResponseCode: 200
+              ResponsePagePath: /index.html
+              ErrorCachingMinTTL: 10
+            - ErrorCode: 404
+              ResponseCode: 200
+              ResponsePagePath: /index.html
+              ErrorCachingMinTTL: 10
+          - - ErrorCode: 403
+              ResponseCode: 404
+              ResponsePagePath: /404.html
+              ErrorCachingMinTTL: 10
+            - ErrorCode: 404
+              ResponseCode: 404
+              ResponsePagePath: /404.html
+              ErrorCachingMinTTL: 10
+
+  # ---------------------------------------------------------------- flat-rate plan
+  PricingPlan:
+    Type: AWS::PricingPlanManager::Subscription
+    Properties:
+      PlanFamily: CloudFront
+      PlanTier: FREE
+      UsageLevel: DEFAULT
+      ResourceArns:
+        - !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}'
+        - !GetAtt WebAcl.Arn
+
+  # ---------------------------------------------------------------- DNS (optional)
+  DnsA:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateDns
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        HostedZoneId: Z2FDTNDATAQYW2 # fixed value for all CloudFront distributions
+        DNSName: !GetAtt Distribution.DomainName
+
+  DnsAAAA:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateDns
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: AAAA
+      AliasTarget:
+        HostedZoneId: Z2FDTNDATAQYW2
+        DNSName: !GetAtt Distribution.DomainName
+
+  DnsExtraA:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateExtraDns
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref ExtraDomainName
+      Type: A
+      AliasTarget:
+        HostedZoneId: Z2FDTNDATAQYW2
+        DNSName: !GetAtt Distribution.DomainName
+
+  DnsExtraAAAA:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateExtraDns
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref ExtraDomainName
+      Type: AAAA
+      AliasTarget:
+        HostedZoneId: Z2FDTNDATAQYW2
+        DNSName: !GetAtt Distribution.DomainName
+
+  # ---------------------------------------------------------------- GitHub Actions deploy role (optional)
+  DeployRole:
+    Type: AWS::IAM::Role
+    Condition: CreateDeployRole
+    Properties:
+      Description: !Sub 'GitHub Actions deploy role for ${SiteName}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Ref GitHubSubject
+      Policies:
+        - PolicyName: site-deploy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: SyncSiteObjects
+                Effect: Allow
+                Action: [s3:PutObject, s3:DeleteObject]
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${BucketName}/*'
+              - Sid: ListSiteBucket
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${BucketName}'
+              - Sid: InvalidateSiteCache
+                Effect: Allow
+                Action: cloudfront:CreateInvalidation
+                Resource: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}'
+
+Outputs:
+  DistributionId:
+    Value: !Ref Distribution
+  DistributionDomainName:
+    Value: !GetAtt Distribution.DomainName
+  WebAclArn:
+    Value: !GetAtt WebAcl.Arn
+  PricingPlanArn:
+    Value: !GetAtt PricingPlan.Arn
+  PricingPlanStatus:
+    Value: !GetAtt PricingPlan.Status
+  BucketName:
+    Value: !Ref BucketName
+  DeployRoleArn:
+    Condition: CreateDeployRole
+    Value: !GetAtt DeployRole.Arn

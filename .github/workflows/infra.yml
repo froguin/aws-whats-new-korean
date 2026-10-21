@@ -1,0 +1,58 @@
+name: Infra (cert + release site)
+
+# Push to main that touches infra/ deploys the shared wildcard certificate, then this repo's own
+# release.awskr.net site stack. Other site repos call deploy-site-infra.yml from their own workflow.
+# Prerequisite: infra/bootstrap.yaml deployed once by hand, and the repository variable
+# AWS_INFRA_ROLE_ARN set (see infra/README.md).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/cert.yaml'
+      - 'infra/site/**'
+      - 'infra/deploy-site.sh'
+      - '.github/workflows/deploy-site-infra.yml'
+      - '.github/workflows/infra.yml'
+  workflow_dispatch:
+    inputs:
+      preview:
+        description: Create change sets only, do not execute
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  cert:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: awskr-infra-cert
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_INFRA_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Deploy wildcard certificate stack
+        env:
+          NO_EXECUTE: ${{ github.event_name == 'workflow_dispatch' && inputs.preview && '--no-execute-changeset' || '' }}
+        run: |
+          ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+          aws cloudformation deploy --region us-east-1 --stack-name awskr-wildcard-cert \
+            --template-file infra/cert.yaml \
+            --role-arn "arn:aws:iam::${ACCOUNT}:role/awskr-infra-cfn-execution" \
+            --tags Project=awskr-net $NO_EXECUTE
+
+  site:
+    needs: cert
+    uses: ./.github/workflows/deploy-site-infra.yml
+    with:
+      params_file: infra/site/params.env
+      preview: ${{ github.event_name == 'workflow_dispatch' && inputs.preview }}

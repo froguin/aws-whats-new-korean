@@ -1,0 +1,33 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Shared wildcard ACM certificate for *.awskr.net (CloudFront requires us-east-1).
+  DNS validation records are created automatically in the awskr.net hosted zone.
+  Deploy in us-east-1 as stack "awskr-wildcard-cert".
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: '*.awskr.net'
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+    Default: Z01517412DUMQ2XQU1189
+
+Resources:
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+      Tags:
+        - Key: Project
+          Value: awskr-net
+
+Outputs:
+  CertificateArn:
+    Description: Wildcard certificate ARN (pass to each site stack as CertificateArn)
+    Value: !Ref Certificate
+    Export:
+      Name: awskr-wildcard-cert-arn

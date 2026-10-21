@@ -1,0 +1,210 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  One-time bootstrap for push-driven infra deploys of the awskr.net sites.
+  Creates (1) a CloudFormation execution role that owns the broad resource permissions and
+  (2) a narrow GitHub OIDC role that can only run awskr-* stacks and pass that execution role.
+  Deploy ONCE by hand (CI cannot bootstrap itself):
+    aws cloudformation deploy --region us-east-1 --stack-name awskr-infra-bootstrap \
+      --template-file bootstrap.yaml --capabilities CAPABILITY_NAMED_IAM
+
+Parameters:
+  GitHubSubjects:
+    Type: CommaDelimitedList
+    Description: >-
+      OIDC subjects (main branch only) allowed to deploy infra. These are the exact values GitHub
+      emits for each repo (bedrock/quick/kiro use the immutable owner@id/repo@id format).
+    Default: >-
+      repo:froguin/aws-whats-new-korean:ref:refs/heads/main,
+      repo:froguin@1848532/bedrock-pricing-compare@1423976117:ref:refs/heads/main,
+      repo:froguin@1848532/amazon-quick-handbook@1342363263:ref:refs/heads/main,
+      repo:froguin@1848532/kiro-handbook@1342363281:ref:refs/heads/main
+  HostedZoneId:
+    Type: String
+    Default: Z01517412DUMQ2XQU1189
+
+Resources:
+  # ------------------------------------------------------------------ CloudFormation execution role
+  CfnExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: awskr-infra-cfn-execution
+      Description: Assumed by CloudFormation to create the awskr.net site stacks.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: awskr-site-stacks
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: SiteBuckets
+                Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:DeleteBucket
+                  - s3:ListBucket
+                  - s3:GetBucket*
+                  - s3:PutBucket*
+                  - s3:GetEncryptionConfiguration
+                  - s3:PutEncryptionConfiguration
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::awskr-*'
+              - Sid: CloudFrontResources
+                Effect: Allow
+                Action:
+                  - cloudfront:CreateDistribution
+                  - cloudfront:CreateDistributionWithTags
+                  - cloudfront:UpdateDistribution
+                  - cloudfront:DeleteDistribution
+                  - cloudfront:GetDistribution
+                  - cloudfront:GetDistributionConfig
+                  - cloudfront:CreateOriginAccessControl
+                  - cloudfront:UpdateOriginAccessControl
+                  - cloudfront:DeleteOriginAccessControl
+                  - cloudfront:GetOriginAccessControl
+                  - cloudfront:GetOriginAccessControlConfig
+                  - cloudfront:CreateFunction
+                  - cloudfront:UpdateFunction
+                  - cloudfront:DeleteFunction
+                  - cloudfront:DescribeFunction
+                  - cloudfront:GetFunction
+                  - cloudfront:PublishFunction
+                  - cloudfront:TagResource
+                  - cloudfront:UntagResource
+                  - cloudfront:ListTagsForResource
+                  - cloudfront:AssociateAlias
+                  - cloudfront:ListDistributions
+                Resource: '*'
+              - Sid: WebAcl
+                Effect: Allow
+                Action:
+                  - wafv2:CreateWebACL
+                  - wafv2:UpdateWebACL
+                  - wafv2:DeleteWebACL
+                  - wafv2:GetWebACL
+                  - wafv2:ListWebACLs
+                  - wafv2:ListTagsForResource
+                  - wafv2:TagResource
+                  - wafv2:UntagResource
+                  - wafv2:AssociateWebACL
+                  - wafv2:DisassociateWebACL
+                  - wafv2:GetManagedRuleSet
+                  - wafv2:ListAvailableManagedRuleGroups
+                  - wafv2:DescribeManagedRuleGroup
+                  - wafv2:CheckCapacity
+                Resource: '*'
+              - Sid: Certificate
+                Effect: Allow
+                Action:
+                  - acm:RequestCertificate
+                  - acm:DescribeCertificate
+                  - acm:DeleteCertificate
+                  - acm:ListCertificates
+                  - acm:AddTagsToCertificate
+                  - acm:RemoveTagsFromCertificate
+                  - acm:ListTagsForCertificate
+                Resource: '*'
+              - Sid: DnsRecords
+                Effect: Allow
+                Action:
+                  - route53:ChangeResourceRecordSets
+                  - route53:ListResourceRecordSets
+                  - route53:GetHostedZone
+                Resource: !Sub 'arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneId}'
+              - Sid: DnsChangeStatus
+                Effect: Allow
+                Action:
+                  - route53:GetChange
+                  - route53:ListHostedZones
+                Resource: '*'
+              - Sid: SiteDeployRoles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/awskr-site-*'
+              - Sid: FlatRatePlan
+                Effect: Allow
+                # Exact action names are not documented in what was checked; narrow after a successful run.
+                Action: pricingplanmanager:*
+                Resource: '*'
+
+  # ------------------------------------------------------------------ GitHub Actions role
+  InfraDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: awskr-infra-deploy
+      Description: GitHub Actions (main branch of the awskr.net repos) -> run awskr-* CloudFormation stacks.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Ref GitHubSubjects
+      Policies:
+        - PolicyName: run-awskr-stacks
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: RunStacks
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:GetTemplate
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:TagResource
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:*:${AWS::AccountId}:stack/awskr-site-*/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:*:${AWS::AccountId}:stack/awskr-wildcard-cert/*'
+              - Sid: ReadOnlyHelpers
+                Effect: Allow
+                Action:
+                  - cloudformation:ListExports
+                  - cloudformation:ValidateTemplate
+                  - cloudformation:GetTemplateSummary
+                Resource: '*'
+              - Sid: WhoAmI
+                Effect: Allow
+                Action: sts:GetCallerIdentity
+                Resource: '*'
+              - Sid: PassExecutionRoleToCloudFormationOnly
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt CfnExecutionRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: cloudformation.amazonaws.com
+
+Outputs:
+  InfraDeployRoleArn:
+    Description: Set as the GitHub repository variable AWS_INFRA_ROLE_ARN in each site repo.
+    Value: !GetAtt InfraDeployRole.Arn
+  CfnExecutionRoleArn:
+    Value: !GetAtt CfnExecutionRole.Arn

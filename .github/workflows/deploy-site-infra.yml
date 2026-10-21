@@ -1,0 +1,61 @@
+name: Deploy site infra (reusable)
+
+# Called by every awskr.net site repo (and by this repo's own infra.yml).
+# Deploys that site's CloudFormation stack from <params_file> using the shared template in
+# aws-whats-new-korean/infra. Runs on main only (the OIDC role trusts the main branch).
+#
+# Needs the repository variable AWS_INFRA_ROLE_ARN (output of infra/bootstrap.yaml) in the CALLING repo.
+
+on:
+  workflow_call:
+    inputs:
+      params_file:
+        description: Path of the site params.env inside the calling repo
+        type: string
+        required: true
+      preview:
+        description: Create the change set only, do not execute it
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: awskr-infra-${{ inputs.params_file }}-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout calling repo
+        uses: actions/checkout@v4
+        with:
+          path: site-repo
+
+      - name: Checkout shared infra (templates and scripts)
+        uses: actions/checkout@v4
+        with:
+          repository: froguin/aws-whats-new-korean
+          ref: main
+          path: infra-src
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_INFRA_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Deploy stack
+        env:
+          CFN_ROLE_NAME: awskr-infra-cfn-execution
+          PREVIEW: ${{ inputs.preview && '1' || '0' }}
+        run: ./infra-src/infra/deploy-site.sh "site-repo/${{ inputs.params_file }}"
+
+      - name: Show stack outputs
+        if: ${{ !inputs.preview }}
+        run: |
+          STACK="$(grep -E '^StackName=' "site-repo/${{ inputs.params_file }}" | head -1 | cut -d= -f2-)"
+          aws cloudformation describe-stacks --region us-east-1 --stack-name "$STACK" \
+            --query 'Stacks[0].Outputs[].[OutputKey,OutputValue]' --output table
