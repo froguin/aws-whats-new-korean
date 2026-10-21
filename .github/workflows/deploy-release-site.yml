@@ -48,7 +48,9 @@ jobs:
           cache: npm
 
       - name: Install
-        run: npm ci
+        # Same fallback as amplify.yml: this project's lockfile has peer-dependency quirks
+        # (@aws-amplify/backend vs aws-cdk-lib) that make a strict `npm ci` fail.
+        run: npm ci || npm install
 
       - name: Build
         env:
