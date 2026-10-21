@@ -14,8 +14,10 @@ all repos side by side under `~/Documents/github/`.
 | `dns-cutover.sh` | Switches a host name to the new distribution in one atomic Route 53 change batch. |
 
 Each site repo keeps only its parameters: `infra/site/params.env`
-(bedrock-pricing-compare, kiro-handbook, amazon-quick-handbook, and this repo's own `site/params.env`
-for release.awskr.net).
+(bedrock-pricing-compare and this repo's own `site/params.env` for release.awskr.net).
+kiro-handbook and amazon-quick-handbook were prepared too but stay on Amplify: this AWS account
+allows only 3 FREE flat-rate plans (not increasable); release.awskr.net and bedrock-compare use two
+of them. Moving them needs a Pro plan ($15/month each) or a free slot.
 
 Why one web ACL per site: a flat-rate plan cannot reuse a web ACL (or CloudFront function) that is
 associated with another distribution, and Amplify cannot join a plan. The rules are defined once in the
@@ -31,7 +33,7 @@ After setup, a push to `main` deploys the infra; nothing is run by hand again.
 |---|---|---|
 | `infra.yml` | this repo | `infra/cert.yaml`, `infra/site/**`, `infra/deploy-site.sh` change: deploys the wildcard cert, then release.awskr.net |
 | `deploy-site-infra.yml` | this repo (reusable) | called by the workflows below |
-| `infra.yml` | bedrock-pricing-compare, kiro-handbook, amazon-quick-handbook | that repo's `infra/site/params.env` changes (or manual run with `preview=true`) |
+| `infra.yml` | bedrock-pricing-compare | that repo's `infra/site/params.env` changes (or manual run with `preview=true`) |
 
 Security model: the GitHub role `awskr-infra-deploy` can only run `awskr-*` stacks and hand the work to
 the CloudFormation execution role `awskr-infra-cfn-execution`, which holds the broad permissions.
@@ -47,7 +49,7 @@ aws cloudformation deploy --region us-east-1 --stack-name awskr-infra-bootstrap 
   --template-file bootstrap.yaml --capabilities CAPABILITY_NAMED_IAM
 ROLE=$(aws cloudformation describe-stacks --region us-east-1 --stack-name awskr-infra-bootstrap \
   --query "Stacks[0].Outputs[?OutputKey=='InfraDeployRoleArn'].OutputValue" --output text)
-for r in aws-whats-new-korean bedrock-pricing-compare kiro-handbook amazon-quick-handbook; do
+for r in aws-whats-new-korean bedrock-pricing-compare; do
   gh variable set AWS_INFRA_ROLE_ARN --repo froguin/$r --body "$ROLE"
 done
 ```
@@ -76,7 +78,7 @@ DNS validation is automatic; the stack finishes when the certificate is ISSUED.
 cd ~/Documents/github/aws-whats-new-korean/infra
 PREVIEW=1 ./deploy-site.sh ../../bedrock-pricing-compare/infra/site/params.env   # review the change set first
 ./deploy-site.sh ../../bedrock-pricing-compare/infra/site/params.env
-# repeat for ../../kiro-handbook, ../../amazon-quick-handbook and this repo's own site/params.env
+# repeat for this repo's own site/params.env (release.awskr.net)
 ```
 Check `PricingPlanStatus` in the stack outputs: it must be `ACTIVE`. If it is `FAILED`, read the
 status reason (the managed IP-reputation rule group is the first suspect if the plan rejects it)
@@ -90,11 +92,11 @@ certificate. Upload content there before the cutover (see "Content").
 A host name can sit on only one CloudFront distribution at a time, so there is a short gap
 (minutes, not measured) between freeing the name and the DNS flip. Do it in this order:
 
-Amplify sites (kiro, quick, amazon-quick, release):
+Amplify site (release):
 1. Upload the built site to the new bucket and invalidate; verify on the cloudfront.net domain.
 2. Amplify console -> Domain management -> remove the host name (frees the alias).
 3. Set `AttachAlias=true` in `params.env`, run `./deploy-site.sh <params.env>`.
-4. `./dns-cutover.sh kiro.awskr.net <DistributionDomainName>` (dry run), then add `--apply`.
+4. `./dns-cutover.sh release.awskr.net <DistributionDomainName>` (dry run), then add `--apply`.
    The CNAME to Amplify is deleted and the A/AAAA aliases created in one batch.
 
 bedrock-compare (live distribution `E1OQXWKSFOXAF` is replaced):
@@ -115,8 +117,7 @@ After it, re-add the host name to the old resource and revert the DNS records.
 
 Each repo needs a GitHub Actions deploy workflow (build -> `aws s3 sync` -> `create-invalidation`)
 using the `DeployRoleArn` stack output via OIDC; bedrock-compare already has one. These workflows
-are not written yet. VitePress sites build to `docs/.vitepress/dist` (quick) or `.vitepress/dist` (kiro);
-release builds to `dist` and also needs `VITE_API_URL` / `VITE_RUM_IDENTITY_POOL_ID`
+are not written yet. release builds to `dist` and also needs `VITE_API_URL` / `VITE_RUM_IDENTITY_POOL_ID`
 (today they come from Amplify's `amplify_outputs.json`).
 
 ## Known unknowns

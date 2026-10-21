@@ -12,12 +12,12 @@ Parameters:
     Type: CommaDelimitedList
     Description: >-
       OIDC subjects (main branch only) allowed to deploy infra. These are the exact values GitHub
-      emits for each repo (bedrock/quick/kiro use the immutable owner@id/repo@id format).
+      emits for each repo (bedrock uses the immutable owner@id/repo@id format). kiro-handbook and
+      amazon-quick-handbook stay on Amplify (the account allows only 3 FREE flat-rate plans), so they are
+      not listed; add their subjects here again if they ever move.
     Default: >-
       repo:froguin/aws-whats-new-korean:ref:refs/heads/main,
-      repo:froguin@1848532/bedrock-pricing-compare@1423976117:ref:refs/heads/main,
-      repo:froguin@1848532/amazon-quick-handbook@1342363263:ref:refs/heads/main,
-      repo:froguin@1848532/kiro-handbook@1342363281:ref:refs/heads/main
+      repo:froguin@1848532/bedrock-pricing-compare@1423976117:ref:refs/heads/main
   HostedZoneId:
     Type: String
     Default: Z01517412DUMQ2XQU1189
@@ -140,8 +140,25 @@ Resources:
                 Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/awskr-site-*'
               - Sid: FlatRatePlan
                 Effect: Allow
-                # Exact action names are not documented in what was checked; narrow after a successful run.
-                Action: pricingplanmanager:*
+                # ApprovePaidSubscription is deliberately absent: a human approves any paid plan.
+                Action:
+                  - pricingplanmanager:CreateSubscription
+                  - pricingplanmanager:GetSubscription
+                  - pricingplanmanager:ListSubscriptions
+                  - pricingplanmanager:UpdateSubscription
+                  - pricingplanmanager:CancelSubscription
+                  - pricingplanmanager:CancelSubscriptionChange
+                  - pricingplanmanager:AssociateResourcesToSubscription
+                  - pricingplanmanager:DisassociateResourcesFromSubscription
+                Resource: '*'
+              - Sid: FlatRatePlanRelatedReads
+                Effect: Allow
+                # Listed in the AWS managed policy PricingPlanManagerFullAccess; the plan service reads these
+                # (Free Tier plan state, usage metrics, Shield Advanced protections) when creating a subscription.
+                Action:
+                  - freetier:GetAccountPlanState
+                  - cloudwatch:GetMetricData
+                  - shield:ListProtections
                 Resource: '*'
 
   # ------------------------------------------------------------------ GitHub Actions role
