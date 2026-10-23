@@ -20,10 +20,10 @@ AWS 공식 [새로운 소식(What's New)](https://aws.amazon.com/new/) 발표를
 
 ## 아키텍처
 
-프런트엔드(정적 SPA)와 백엔드(데이터 파이프라인)를 분리했습니다. 프런트엔드는 S3 + CloudFront(정액제)로, 백엔드는 독립 CloudFormation 스택으로 운영합니다. (이전에는 Amplify Gen2 풀스택이었습니다.)
+프런트엔드(정적 SPA)와 백엔드(데이터 파이프라인)를 분리했습니다. 프런트엔드는 S3 + CloudFront(정액제)로, 백엔드는 독립 CloudFormation 스택으로 운영합니다.
 
 ```
-백엔드  스택 awskr-backend-whatsnew (ap-northeast-2)
+백엔드  (EventBridge + Lambda + DynamoDB + SQS, ap-northeast-2)
   EventBridge Scheduler (15분)
     → Lambda rss-collector  → DynamoDB 저장 → SQS 큐잉
   SQS → Lambda translator
@@ -38,7 +38,7 @@ AWS 공식 [새로운 소식(What's New)](https://aws.amazon.com/new/) 발표를
 
 프런트엔드
   Vite + React + Cloudscape SPA (정적 빌드)
-    → S3 + CloudFront (정액제, whatsnew.awskr.net)
+    → S3 + CloudFront (정액제, whats-new.awskr.net)
     → VITE_API_URL 로 백엔드 HTTP API 호출
 ```
 
@@ -74,10 +74,10 @@ PREVIEW=1 ./deploy.sh <prefix>       # 변경 세트만 생성(검토용)
 
 ### 프런트엔드 (`infra/site/`)
 
+프런트엔드는 `main` push가 주 배포 경로입니다 — GitHub Actions가 Vite 빌드 후 S3 게시 + CloudFront 무효화를 수행합니다. S3/CloudFront 스택 자체(생성·갱신)는 아래로 배포합니다.
+
 ```bash
-# 사이트 스택(S3 + CloudFront) 생성/갱신
-infra/deploy-site.sh infra/site/params.env
-# GitHub Actions "Deploy release site" 워크플로가 빌드 후 S3 게시 + CloudFront 무효화
+infra/deploy-site.sh infra/site/params.env   # 사이트 스택(S3 + CloudFront) 생성/갱신
 ```
 
 ## 로컬 개발
@@ -90,7 +90,7 @@ npm run dev              # Vite 개발 서버 (localhost:5173)
 ## 프로젝트 구조
 
 ```
-├── amplify/functions/          # Lambda 핸들러 소스 (rss-collector, translator, api)
+├── amplify/functions/          # Lambda 핸들러 소스 (rss-collector, translator, api) — 디렉터리명은 레거시이며, 실제 배포는 독립 CloudFormation 스택(infra/backend)
 ├── src/                        # React SPA (App.tsx, main.tsx, fonts.css)
 ├── infra/
 │   ├── backend/                # 독립 백엔드 스택 (template.yaml, package.sh, deploy.sh, migrate-data.py)
