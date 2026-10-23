@@ -1,10 +1,10 @@
-# AWS What's New 한국어 요약
+# AWS 새로운 소식 한국어 요약
 
-[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://whatsnew.awskr.net)
+[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://whats-new.awskr.net)
 
-AWS 공식 [What's New](https://aws.amazon.com/new/) 릴리스 노트를 Amazon Bedrock으로 자동 번역·검수하여 한국어로 보여주는 서버리스 애플리케이션입니다.
+AWS 공식 [새로운 소식(What's New)](https://aws.amazon.com/new/) 발표를 Amazon Bedrock으로 자동 번역·검수하여 한국어로 보여주는 서버리스 애플리케이션입니다.
 
-- 라이브: https://whatsnew.awskr.net
+- 라이브: https://whats-new.awskr.net (별칭: https://whatsnew.awskr.net)
 
 ## 주요 기능
 

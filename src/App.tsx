@@ -250,8 +250,8 @@ export default function App() {
 
   useEffect(() => {
     document.title = selectedItems[0]
-      ? `${selectedItems[0].title} — AWS What's New 한국어 요약`
-      : "AWS What's New 한국어 요약";
+      ? `${selectedItems[0].title} — AWS 새로운 소식 한국어 요약`
+      : "AWS 새로운 소식 한국어 요약";
   }, [selectedItems]);
 
   // ── Filtering ──
@@ -412,7 +412,7 @@ export default function App() {
   const headerEl = (
     <Header
       counter={hasFilter ? `(${filtered.length}/${items.length})` : `(${items.length})`}
-      description="AWS 공식 릴리스 노트를 한국어로 자동 번역·요약하여 제공합니다."
+      description="AWS 공식 새로운 소식(What's New)을 한국어로 자동 번역·요약하여 제공합니다."
       actions={
         <SpaceBetween direction="horizontal" size="xs">
           {detail && <Button href={detail.url} iconName="external" target="_blank" variant="normal">원문 보기</Button>}
@@ -420,7 +420,7 @@ export default function App() {
         </SpaceBetween>
       }
     >
-      릴리스 노트
+      새로운 소식
     </Header>
   );
 
