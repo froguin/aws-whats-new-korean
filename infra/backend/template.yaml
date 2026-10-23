@@ -14,7 +14,7 @@ Parameters:
     Description: Key prefix of this build's zips, printed by package.sh (a content hash).
   AllowedOrigins:
     Type: CommaDelimitedList
-    Default: 'https://release.awskr.net,http://localhost:5173'
+    Default: 'https://whatsnew.awskr.net,https://release.awskr.net,http://localhost:5173'
     Description: CORS origins of the public API.
   ScheduleState:
     Type: String
