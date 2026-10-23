@@ -147,23 +147,6 @@ Resources:
           // Serve the pre-compressed copy of the page matching Accept-Encoding.
           function handler(event) {
             var req = event.request;
-            // 301 the old host to the canonical one (preserve path + query).
-            var hh = req.headers.host;
-            if (hh && hh.value === "release.awskr.net") {
-              var qs = "";
-              if (req.querystring) {
-                var parts = [];
-                for (var k in req.querystring) {
-                  parts.push(k + (req.querystring[k].value ? "=" + req.querystring[k].value : ""));
-                }
-                if (parts.length) qs = "?" + parts.join("&");
-              }
-              return {
-                statusCode: 301,
-                statusDescription: "Moved Permanently",
-                headers: { location: { value: "https://whatsnew.awskr.net" + req.uri + qs } }
-              };
-            }
             if (req.uri === "/" || req.uri === "/index.html") {
               var h = req.headers["accept-encoding"];
               var ae = h ? h.value : "";
