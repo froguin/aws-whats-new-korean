@@ -14,12 +14,16 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 const TABLE = process.env.TABLE_NAME;
 const SITE_BUCKET = process.env.SITE_BUCKET;
 const OBJECT_KEY = process.env.OBJECT_KEY || 'articles.json';
+// The site bucket lives in us-east-1 (with the CloudFront distribution), while
+// this Lambda runs in ap-northeast-2. The S3 client must target the bucket's
+// own region or S3 answers 301 PermanentRedirect on the cross-region request.
+const SITE_BUCKET_REGION = process.env.SITE_BUCKET_REGION || 'us-east-1';
 // Short edge/browser cache: fresh within one collection cycle without needing
 // a CloudFront invalidation on every run.
 const CACHE_CONTROL = process.env.CACHE_CONTROL || 'public, max-age=300, s-maxage=300';
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
-const s3 = new S3Client({});
+const s3 = new S3Client({ region: SITE_BUCKET_REGION });
 
 function mapItem(i) {
   return {

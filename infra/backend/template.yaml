@@ -52,6 +52,10 @@ Parameters:
     Description: >-
       S3 bucket behind the CloudFront site. The publisher writes articles.json here
       so visitors read a cached static file instead of calling the runtime API.
+  SiteBucketRegion:
+    Type: String
+    Default: us-east-1
+    Description: Region of the site bucket (it lives with CloudFront in us-east-1, not ap-northeast-2).
   PublisherSchedule:
     Type: String
     Default: rate(15 minutes)
@@ -352,6 +356,7 @@ Resources:
         Variables:
           TABLE_NAME: !Ref Articles
           SITE_BUCKET: !Ref SiteBucketName
+          SITE_BUCKET_REGION: !Ref SiteBucketRegion
           OBJECT_KEY: articles.json
 
   # ---------------------------------------------------------------- triggers
