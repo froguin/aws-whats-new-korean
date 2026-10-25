@@ -21,8 +21,6 @@ import Flashbar from '@cloudscape-design/components/flashbar';
 import Popover from '@cloudscape-design/components/popover';
 import { applyMode, Mode } from '@cloudscape-design/global-styles';
 
-const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
-
 interface Summary { what_changed?: string; why_it_matters?: string }
 interface Article {
   id: string; title: string; titleEn: string;
@@ -213,21 +211,17 @@ export default function App() {
   }, []);
 
   const fetchArticles = useCallback(async (signal?: AbortSignal) => {
-    if (!API_URL) { setError('API 주소가 설정되지 않았습니다.'); setLoading(false); return; }
     setLoading(true); setError(null);
     try {
-      let all: Article[] = [];
-      let nextToken: string | null = null;
-      do {
-        const url: string = `${API_URL}/articles?limit=200${nextToken ? `&nextToken=${encodeURIComponent(nextToken)}` : ''}`;
-        const r: Response = await fetch(url, { signal });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const d: { items?: Article[]; nextToken?: string } = await r.json();
-        all = all.concat(d.items || []);
-        nextToken = d.nextToken || null;
-      } while (nextToken && !signal?.aborted);
+      // Static snapshot published to the site bucket by the backend publisher
+      // (articles.json). Visitors read this cached file via CloudFront instead
+      // of calling the runtime API, so no per-request compute is involved.
+      const r: Response = await fetch(`/articles.json?t=${Date.now()}`, { signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d: { items?: Article[] } = await r.json();
+      const all: Article[] = d.items || [];
       setItems(all);
-      setFlashItems([{ type: 'success', content: `${all.length}개의 릴리스 노트를 불러왔습니다.`, dismissible: true, dismissLabel: '닫기', onDismiss: () => setFlashItems([]), id: 'load-success' }]);
+      setFlashItems([{ type: 'success', content: `${all.length}개의 새로운 소식을 불러왔습니다.`, dismissible: true, dismissLabel: '닫기', onDismiss: () => setFlashItems([]), id: 'load-success' }]);
     } catch (e: any) {
       if (signal?.aborted) return;
       const msg = e.message?.startsWith('HTTP 5') ? '서버 오류가 발생했습니다.' :

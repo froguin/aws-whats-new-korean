@@ -53,10 +53,7 @@ jobs:
         run: npm ci || npm install
 
       - name: Build
-        env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
         run: |
-          test -n "$VITE_API_URL" || { echo "VITE_API_URL variable is empty" >&2; exit 1; }
           npm run build
           test -f dist/index.html
 
@@ -74,8 +71,10 @@ jobs:
               --cache-control "public, max-age=31536000, immutable"
           fi
           # Everything else except the entry page: short cache.
+          # NOTE: articles.json is written by the backend publisher (not the build),
+          # so it must be excluded from --delete or every deploy would wipe it.
           aws s3 sync dist "s3://$BUCKET" --delete --no-progress \
-            --exclude "assets/*" --exclude "index.html" \
+            --exclude "assets/*" --exclude "index.html" --exclude "articles.json" \
             --cache-control "public, max-age=3600"
           # Entry page last, so it only references assets that already exist.
           aws s3 cp dist/index.html "s3://$BUCKET/index.html" --no-progress \

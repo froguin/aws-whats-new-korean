@@ -46,6 +46,16 @@ Parameters:
   ApiBurstLimit:
     Type: Number
     Default: 40
+  SiteBucketName:
+    Type: String
+    Default: awskr-whats-new-korean-site
+    Description: >-
+      S3 bucket behind the CloudFront site. The publisher writes articles.json here
+      so visitors read a cached static file instead of calling the runtime API.
+  PublisherSchedule:
+    Type: String
+    Default: rate(15 minutes)
+    Description: How often the publisher regenerates articles.json from DynamoDB.
 
 Resources:
   # ---------------------------------------------------------------- data
@@ -120,6 +130,11 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-api'
+      RetentionInDays: 14
+  PublisherLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-publisher'
       RetentionInDays: 14
 
   # ---------------------------------------------------------------- roles (least privilege per function)
@@ -219,6 +234,28 @@ Resources:
                 Action: ['dynamodb:GetItem', 'dynamodb:Query']
                 Resource: [!GetAtt Articles.Arn, !Sub '${Articles.Arn}/index/*']
 
+  PublisherRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - { Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: 'sts:AssumeRole' }
+      Policies:
+        - PolicyName: run
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ['logs:CreateLogStream', 'logs:PutLogEvents']
+                Resource: !GetAtt PublisherLogs.Arn
+              - Effect: Allow
+                Action: ['dynamodb:Query']
+                Resource: [!GetAtt Articles.Arn, !Sub '${Articles.Arn}/index/*']
+              - Effect: Allow
+                Action: 's3:PutObject'
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${SiteBucketName}/articles.json'
+
   # ---------------------------------------------------------------- functions
   RssCollector:
     Type: AWS::Lambda::Function
@@ -297,6 +334,26 @@ Resources:
         Variables:
           TABLE_NAME: !Ref Articles
 
+  Publisher:
+    Type: AWS::Lambda::Function
+    DependsOn: PublisherLogs
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-publisher'
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      Handler: index.handler
+      Role: !GetAtt PublisherRole.Arn
+      Timeout: 120
+      MemorySize: 256
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Sub '${ArtifactPrefix}/publisher.zip'
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref Articles
+          SITE_BUCKET: !Ref SiteBucketName
+          OBJECT_KEY: articles.json
+
   # ---------------------------------------------------------------- triggers
   TranslatorFromQueue:
     Type: AWS::Lambda::EventSourceMapping
@@ -329,6 +386,24 @@ Resources:
       FunctionName: !Ref RssCollector
       Principal: events.amazonaws.com
       SourceArn: !GetAtt RssSchedule.Arn
+
+  PublisherScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Regenerate articles.json from DynamoDB into the site bucket
+      ScheduleExpression: !Ref PublisherSchedule
+      State: !Ref ScheduleState
+      Targets:
+        - Id: publisher
+          Arn: !GetAtt Publisher.Arn
+
+  PublisherSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref Publisher
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt PublisherScheduleRule.Arn
 
   # ---------------------------------------------------------------- public API
   PublicApi:
@@ -386,6 +461,9 @@ Outputs:
   ApiUrl:
     Description: Value for the VITE_API_URL repository variable after the cutover.
     Value: !GetAtt PublicApi.ApiEndpoint
+  PublisherFunction:
+    Description: Invoke once after deploy to seed articles.json before the first scheduled run.
+    Value: !Ref Publisher
   TableName:
     Value: !Ref Articles
   TranslationQueueUrl:
