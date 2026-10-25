@@ -3,7 +3,7 @@
 #   ./deploy.sh <ARTIFACT_PREFIX> [extra Key=Value parameter overrides...]
 # Examples:
 #   ./deploy.sh 3fa9c01b22de                      # first deploy: schedule stays DISABLED
-#   ./deploy.sh 3fa9c01b22de ScheduleState=ENABLED # after the old Amplify schedule is switched off
+#   ./deploy.sh 3fa9c01b22de ScheduleState=ENABLED # turn the schedules on
 #   PREVIEW=1 ./deploy.sh 3fa9c01b22de             # create the change set only
 set -euo pipefail
 

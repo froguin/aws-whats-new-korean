@@ -32,14 +32,16 @@ AWS 공식 [새로운 소식(What's New)](https://aws.amazon.com/new/) 발표를
     → 품질 게이트: 필수 필드 검증, CJK 오염 감지 → 재시도 → 실패 시 DLQ
     → Bedrock Nova Micro: AI 검수 (필드별 교차 검증)
     → DynamoDB 저장
-  Lambda api → API Gateway HTTP API
+  EventBridge Scheduler (15분)
+    → Lambda publisher → 번역 완료 기사 전체를 articles.json 으로 사이트 버킷에 기록
+  Lambda api → API Gateway HTTP API (프로그램 접근용, 속도 제한)
     ├─ GET /articles  기사 조회
     └─ GET /stats     파이프라인 상태
 
 프런트엔드
   Vite + React + Cloudscape SPA (정적 빌드)
     → S3 + CloudFront (정액제, whats-new.awskr.net)
-    → VITE_API_URL 로 백엔드 HTTP API 호출
+    → 같은 도메인의 /articles.json 한 개만 읽음 (방문자는 Lambda·DynamoDB를 호출하지 않음)
 ```
 
 ## 비용 (프리티어 설계)
@@ -49,9 +51,9 @@ AWS 공식 [새로운 소식(What's New)](https://aws.amazon.com/new/) 발표를
 | Lambda | 40만 GB-초/월 | ~2.6K GB-초/월 |
 | DynamoDB | 25 RCU + 25 WCU (상시) | 프로비저닝 10/10 테이블 + 10/10 인덱스 |
 | SQS | 1M msg/월 | ~3K/월 |
-| EventBridge | 무료 | 스케줄 1개 |
+| EventBridge | 무료 | 스케줄 2개 (수집·게시) |
 | CloudFront | 정액제 플랜 | 1개 배포 |
-| API Gateway (HTTP API) | 12개월 100만 호출 | 저트래픽, 속도 제한으로 방어 |
+| API Gateway (HTTP API) | 12개월 100만 호출 | 사이트는 호출하지 않음, 프로그램 접근용 + 속도 제한 |
 | Bedrock (Nova Lite + Micro) | 종량제 | **~$0.50/월** |
 
 ## 사전 요구사항
@@ -68,9 +70,10 @@ cd infra/backend
 ./package.sh                         # Lambda 코드 zip → artifacts 버킷, ARTIFACT_PREFIX 출력
 PREVIEW=1 ./deploy.sh <prefix>       # 변경 세트만 생성(검토용)
 ./deploy.sh <prefix> ScheduleState=ENABLED   # 실제 배포 (스케줄 켜기)
+aws lambda invoke --region ap-northeast-2 --function-name awskr-backend-whatsnew-publisher /dev/stdout   # articles.json 즉시 생성
 ```
 
-자세한 이전·검증·롤백 순서는 [`infra/backend/README.md`](infra/backend/README.md).
+자세한 내용은 [`infra/backend/README.md`](infra/backend/README.md).
 
 ### 프런트엔드 (`infra/site/`)
 
@@ -90,10 +93,10 @@ npm run dev              # Vite 개발 서버 (localhost:5173)
 ## 프로젝트 구조
 
 ```
-├── amplify/functions/          # Lambda 핸들러 소스 (rss-collector, translator, api) — 디렉터리명은 레거시이며, 실제 배포는 독립 CloudFormation 스택(infra/backend)
+├── functions/                  # Lambda 핸들러 소스 (rss-collector, translator, region-resolver, publisher, api)
 ├── src/                        # React SPA (App.tsx, main.tsx, fonts.css)
 ├── infra/
-│   ├── backend/                # 독립 백엔드 스택 (template.yaml, package.sh, deploy.sh, migrate-data.py)
+│   ├── backend/                # 백엔드 스택 (template.yaml, package.sh, deploy.sh, requeue-pending.py)
 │   ├── site/                   # 프런트 S3+CloudFront 스택 (template.yaml, params.env)
 │   ├── deploy-site.sh          # 사이트 스택 배포
 │   └── dns-cutover.sh          # Route 53 A/AAAA ALIAS 전환
@@ -104,7 +107,6 @@ npm run dev              # Vite 개발 서버 (localhost:5173)
 
 | 환경변수 | 설명 | 기본값 |
 |---------|------|--------|
-| `VITE_API_URL` | 백엔드 HTTP API URL | 사이트 빌드 시 주입 |
 | `BEDROCK_TRANSLATE_MODEL` | 번역 모델 | `apac.amazon.nova-lite-v1:0` |
 | `BEDROCK_REVIEW_MODEL` | 검수 모델 | `apac.amazon.nova-micro-v1:0` |
 

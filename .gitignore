@@ -4,8 +4,6 @@ dist/
 .env
 .env.local
 .dev.vars
-.amplify/
-amplifyconfiguration*
 
 # Local Netlify folder
 .netlify

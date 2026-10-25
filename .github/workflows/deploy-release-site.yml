@@ -2,12 +2,11 @@ name: Deploy release site (S3 + CloudFront)
 
 # Builds the Vite frontend and publishes it to the release.awskr.net bucket behind the
 # CloudFront flat-rate distribution (stack awskr-site-aws-whats-new-korean).
-# The Amplify Gen2 backend (API, pipeline) is still deployed by Amplify; only hosting moved.
+# The backend (infra/backend) is a separate CloudFormation stack; the site only reads the
+# static articles.json that the backend publisher writes to the bucket.
 #
-# Repository variables needed (Settings -> Secrets and variables -> Actions -> Variables):
+# Repository variable needed (Settings -> Secrets and variables -> Actions -> Variables):
 #   AWS_SITE_ROLE_ARN              DeployRoleArn output of the site stack
-#   VITE_API_URL                   apiUrl from the backend's customOutputs
-# These values are visible in the shipped JavaScript anyway; none is a secret.
 
 on:
   push:
@@ -48,9 +47,7 @@ jobs:
           cache: npm
 
       - name: Install
-        # Same fallback as amplify.yml: this project's lockfile has peer-dependency quirks
-        # (@aws-amplify/backend vs aws-cdk-lib) that make a strict `npm ci` fail.
-        run: npm ci || npm install
+        run: npm ci
 
       - name: Build
         run: |

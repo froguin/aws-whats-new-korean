@@ -113,12 +113,12 @@ bedrock-compare (live distribution `E1OQXWKSFOXAF` is replaced):
 Rollback before step "remove from Amplify / old distribution" is just deleting the new stack.
 After it, re-add the host name to the old resource and revert the DNS records.
 
-## Content (the part that replaces Amplify's build)
+## Content
 
 Each repo needs a GitHub Actions deploy workflow (build -> `aws s3 sync` -> `create-invalidation`)
-using the `DeployRoleArn` stack output via OIDC; bedrock-compare already has one. These workflows
-are not written yet. release builds to `dist` and needs the `VITE_API_URL` build variable
-(today they come from Amplify's `amplify_outputs.json`).
+using the `DeployRoleArn` stack output via OIDC. bedrock-compare and release (`aws-whats-new-korean`)
+already have one; the release site reads the static `articles.json` written by the backend publisher,
+so it needs no build variables.
 
 ## Known unknowns
 

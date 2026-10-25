@@ -37,9 +37,6 @@ jobs:
         run: npm install
 
       - name: Verify build
-        env:
-          # 빌드 시 API_URL 미설정이어도 타입 체크·번들링은 통과해야 한다
-          VITE_API_URL: ''
         run: npm run build
 
       - name: Commit updated lockfile

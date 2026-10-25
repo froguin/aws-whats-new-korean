@@ -8,7 +8,7 @@ set -euo pipefail
 
 REGION=ap-northeast-2
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SRC="$HERE/../../amplify/functions"
+SRC="$HERE/../../functions"
 FUNCS=(rss-collector translator region-resolver api publisher)
 
 BUCKET="$(aws cloudformation describe-stacks --region "$REGION" --stack-name awskr-backend-artifacts \
