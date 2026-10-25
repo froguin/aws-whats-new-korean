@@ -8,7 +8,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 // longer sits in the request path — lower cost, smaller attack surface.
 //
 // Runs on a schedule (a few minutes after each 15-min collection cycle) and
-// also on demand (any invoke). It mirrors the API's /articles mapping exactly
+// also on demand (any invoke). Its JSON schema matches the frontend's article model.
 // so the frontend's data shape is unchanged.
 
 const TABLE = process.env.TABLE_NAME;

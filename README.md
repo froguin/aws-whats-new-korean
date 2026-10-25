@@ -34,9 +34,6 @@ AWS 공식 [새로운 소식(What's New)](https://aws.amazon.com/new/) 발표를
     → DynamoDB 저장
   EventBridge Scheduler (15분)
     → Lambda publisher → 번역 완료 기사 전체를 articles.json 으로 사이트 버킷에 기록
-  Lambda api → API Gateway HTTP API (프로그램 접근용, 속도 제한)
-    ├─ GET /articles  기사 조회
-    └─ GET /stats     파이프라인 상태
 
 프런트엔드
   Vite + React + Cloudscape SPA (정적 빌드)
@@ -53,7 +50,6 @@ AWS 공식 [새로운 소식(What's New)](https://aws.amazon.com/new/) 발표를
 | SQS | 1M msg/월 | ~3K/월 |
 | EventBridge | 무료 | 스케줄 2개 (수집·게시) |
 | CloudFront | 정액제 플랜 | 1개 배포 |
-| API Gateway (HTTP API) | 12개월 100만 호출 | 사이트는 호출하지 않음, 프로그램 접근용 + 속도 제한 |
 | Bedrock (Nova Lite + Micro) | 종량제 | **~$0.50/월** |
 
 ## 사전 요구사항
@@ -65,15 +61,7 @@ AWS 공식 [새로운 소식(What's New)](https://aws.amazon.com/new/) 발표를
 
 ### 백엔드 (`infra/backend/`)
 
-```bash
-cd infra/backend
-./package.sh                         # Lambda 코드 zip → artifacts 버킷, ARTIFACT_PREFIX 출력
-PREVIEW=1 ./deploy.sh <prefix>       # 변경 세트만 생성(검토용)
-./deploy.sh <prefix> ScheduleState=ENABLED   # 실제 배포 (스케줄 켜기)
-aws lambda invoke --region ap-northeast-2 --function-name awskr-backend-whatsnew-publisher /dev/stdout   # articles.json 즉시 생성
-```
-
-자세한 내용은 [`infra/backend/README.md`](infra/backend/README.md).
+`functions/**` 또는 `infra/backend/**` 변경을 `main`에 푸시하면 GitHub Actions가 Lambda 패키징 → CloudFormation 배포 → `articles.json` 즉시 시드를 자동으로 수행합니다. 초기 IAM/OIDC 설정과 수동 복구 절차는 [`infra/backend/README.md`](infra/backend/README.md)를 따르세요.
 
 ### 프런트엔드 (`infra/site/`)
 

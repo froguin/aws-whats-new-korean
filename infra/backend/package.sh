@@ -9,7 +9,7 @@ set -euo pipefail
 REGION=ap-northeast-2
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="$HERE/../../functions"
-FUNCS=(rss-collector translator region-resolver api publisher)
+FUNCS=(rss-collector translator region-resolver publisher)
 
 BUCKET="$(aws cloudformation describe-stacks --region "$REGION" --stack-name awskr-backend-artifacts \
   --query "Stacks[0].Outputs[?OutputKey=='ArtifactBucketName'].OutputValue" --output text)"

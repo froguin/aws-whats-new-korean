@@ -7,7 +7,7 @@ Plain CloudFormation, sized for the AWS always-free allowances. Deploy in `ap-no
 |---|---|
 | `artifacts.yaml` | Private bucket for the zipped function code (stack `awskr-backend-artifacts`) |
 | `package.sh` | Zips `functions/*/handler.js` (as `index.mjs`) and uploads under a content-hash prefix |
-| `template.yaml` | DynamoDB, 3 SQS queues, 5 Lambda functions, 15-minute schedules, HTTP API |
+| `template.yaml` | DynamoDB, 3 SQS queues, 4 Lambda functions, 15-minute schedules |
 | `deploy.sh` | Deploys `template.yaml` (`PREVIEW=1` = change set only) |
 | `requeue-pending.py` | Re-queues articles stuck in `STATUS#pending` (the collector only queues new articles) |
 
@@ -20,9 +20,20 @@ nothing to install or bundle. The code lives in `../../functions/`.
 2. `translator` summarizes and translates each article with Amazon Bedrock and stores it in DynamoDB.
 3. `publisher` (every 15 minutes) writes all translated articles to `articles.json` in the site bucket.
    The site reads that single static file through CloudFront, so visitors never reach Lambda or DynamoDB.
-4. `api` (HTTP API, throttled to 20 req/s) remains for programmatic access to `/articles` and `/stats`.
 
 ## Deploy
+
+### Automatic backend deploy (primary)
+
+A push to `main` that changes `functions/**` or `infra/backend/**` runs
+`Deploy backend (Lambda + static snapshot)`. It packages the four handlers, deploys the
+CloudFormation stack, then invokes `publisher` so `articles.json` exists immediately.
+
+The one-time prerequisites are the artifact bucket, the backend GitHub OIDC role, and the
+repository variable `AWS_BACKEND_DEPLOY_ROLE_ARN`; all are defined in `infra/bootstrap.yaml`.
+Use **Run workflow** in GitHub Actions to re-deploy the current backend revision without a code change.
+
+### Manual backend deploy (recovery)
 
 ```bash
 cd infra/backend

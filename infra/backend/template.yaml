@@ -1,9 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  release.awskr.net data pipeline without Amplify: DynamoDB (provisioned, inside the always-free
-  25 RCU / 25 WCU allowance), SQS, four Lambda functions, a 15-minute EventBridge schedule and an
-  HTTP API. Same code as amplify/functions/*; deploy in ap-northeast-2. Replaces the Amplify Gen2
-  stack amplify-d27cqsuosbietu-main-branch-* (see README.md for the migration order).
+  AWS What's New static data pipeline: DynamoDB (provisioned, inside the always-free 25 RCU / 25 WCU
+  allowance), SQS, four Lambda functions, and two 15-minute EventBridge schedules. Deploy in ap-northeast-2.
 
 Parameters:
   ArtifactBucket:
@@ -12,15 +10,11 @@ Parameters:
   ArtifactPrefix:
     Type: String
     Description: Key prefix of this build's zips, printed by package.sh (a content hash).
-  AllowedOrigins:
-    Type: CommaDelimitedList
-    Default: 'https://whatsnew.awskr.net,https://whats-new.awskr.net,http://localhost:5173'
-    Description: CORS origins of the public API.
   ScheduleState:
     Type: String
     AllowedValues: [ENABLED, DISABLED]
     Default: DISABLED
-    Description: Keep DISABLED until the old Amplify stack's schedule is switched off (avoids double collection).
+    Description: Enable the RSS collection and static publisher schedules.
   TableReadCapacity:
     Type: Number
     Default: 10
@@ -39,13 +33,6 @@ Parameters:
   ReviewModel:
     Type: String
     Default: apac.amazon.nova-micro-v1:0
-  ApiRateLimit:
-    Type: Number
-    Default: 20
-    Description: Steady requests per second allowed on the public API (cost guard; the API has no WAF).
-  ApiBurstLimit:
-    Type: Number
-    Default: 40
   SiteBucketName:
     Type: String
     Default: awskr-whats-new-korean-site
@@ -129,11 +116,6 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-region-resolver'
-      RetentionInDays: 14
-  ApiLogs:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-api'
       RetentionInDays: 14
   PublisherLogs:
     Type: AWS::Logs::LogGroup
@@ -219,25 +201,6 @@ Resources:
                 Action: 'ssm:GetParametersByPath'
                 Resource: !Sub 'arn:${AWS::Partition}:ssm:us-east-1::parameter/aws/service/global-infrastructure/*'
 
-  ApiRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - { Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: 'sts:AssumeRole' }
-      Policies:
-        - PolicyName: run
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action: ['logs:CreateLogStream', 'logs:PutLogEvents']
-                Resource: !GetAtt ApiLogs.Arn
-              - Effect: Allow
-                Action: ['dynamodb:GetItem', 'dynamodb:Query']
-                Resource: [!GetAtt Articles.Arn, !Sub '${Articles.Arn}/index/*']
-
   PublisherRole:
     Type: AWS::IAM::Role
     Properties:
@@ -319,25 +282,6 @@ Resources:
         Variables:
           TABLE_NAME: !Ref Articles
 
-  Api:
-    Type: AWS::Lambda::Function
-    DependsOn: ApiLogs
-    Properties:
-      FunctionName: !Sub '${AWS::StackName}-api'
-      Runtime: nodejs22.x
-      Architectures: [arm64]
-      Handler: index.handler
-      Role: !GetAtt ApiRole.Arn
-      Timeout: 30
-      MemorySize: 256
-      ReservedConcurrentExecutions: 5
-      Code:
-        S3Bucket: !Ref ArtifactBucket
-        S3Key: !Sub '${ArtifactPrefix}/api.zip'
-      Environment:
-        Variables:
-          TABLE_NAME: !Ref Articles
-
   Publisher:
     Type: AWS::Lambda::Function
     DependsOn: PublisherLogs
@@ -410,62 +354,7 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt PublisherScheduleRule.Arn
 
-  # ---------------------------------------------------------------- public API
-  PublicApi:
-    Type: AWS::ApiGatewayV2::Api
-    Properties:
-      Name: !Sub '${AWS::StackName}-public-api'
-      Description: AWS Whats New Korean - Public API
-      ProtocolType: HTTP
-      CorsConfiguration:
-        AllowOrigins: !Ref AllowedOrigins
-        AllowMethods: [GET]
-        AllowHeaders: [Content-Type]
-
-  ApiIntegration:
-    Type: AWS::ApiGatewayV2::Integration
-    Properties:
-      ApiId: !Ref PublicApi
-      IntegrationType: AWS_PROXY
-      IntegrationUri: !GetAtt Api.Arn
-      PayloadFormatVersion: '2.0'
-
-  ArticlesRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref PublicApi
-      RouteKey: 'GET /articles'
-      Target: !Sub 'integrations/${ApiIntegration}'
-
-  StatsRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref PublicApi
-      RouteKey: 'GET /stats'
-      Target: !Sub 'integrations/${ApiIntegration}'
-
-  ApiStage:
-    Type: AWS::ApiGatewayV2::Stage
-    Properties:
-      ApiId: !Ref PublicApi
-      StageName: $default
-      AutoDeploy: true
-      DefaultRouteSettings:
-        ThrottlingRateLimit: !Ref ApiRateLimit
-        ThrottlingBurstLimit: !Ref ApiBurstLimit
-
-  ApiInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref Api
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${PublicApi}/*/*'
-
 Outputs:
-  ApiUrl:
-    Description: Value for the VITE_API_URL repository variable after the cutover.
-    Value: !GetAtt PublicApi.ApiEndpoint
   PublisherFunction:
     Description: Invoke once after deploy to seed articles.json before the first scheduled run.
     Value: !Ref Publisher
