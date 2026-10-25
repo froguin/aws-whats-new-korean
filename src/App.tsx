@@ -33,16 +33,14 @@ interface Article {
 
 function getStatusLabel(s: string): string {
   const raw = (s || '').replace(/[\[\]"]/g, '').trim().toLowerCase();
-  if (!raw || raw.includes('launched') || raw.includes('ga') || raw === 'general availability' || raw.includes('정식 출시')) return '정식 출시';
-  if (raw.includes('preview') || raw.includes('미리보기')) return '미리보기';
-  if (raw.includes('beta') || raw.includes('베타')) return '베타';
+  // 베타는 '미리보기'로 흡수한다(실데이터상 0.4%, 정식 출시 이전 단계라는 의미는 동일).
+  if (raw.includes('preview') || raw.includes('미리보기') || raw.includes('beta') || raw.includes('베타')) return '미리보기';
   if (raw.includes('retired') || raw.includes('deprecated') || raw.includes('지원 종료')) return '지원 종료';
-  return raw;
+  return '정식 출시'; // GA/launched 및 그 외(미매칭) 전부
 }
 function getStatusType(s: string): 'success' | 'info' | 'warning' | 'error' {
   const label = getStatusLabel(s);
   if (label === '미리보기') return 'info';
-  if (label === '베타') return 'warning';
   if (label === '지원 종료') return 'error';
   return 'success';
 }
