@@ -220,7 +220,195 @@ Resources:
                   StringEquals:
                     iam:PassedToService: cloudformation.amazonaws.com
 
+  # ------------------------------------------------------------------ backend deployment roles
+  BackendCfnExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: awskr-backend-cfn-execution
+      Description: CloudFormation execution role for the awskr Whats New data pipeline.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: awskr-backend-resources
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: LambdaFunctions
+                Effect: Allow
+                Action:
+                  - lambda:CreateFunction
+                  - lambda:DeleteFunction
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:AddPermission
+                  - lambda:RemovePermission
+                  - lambda:TagResource
+                  - lambda:UntagResource
+                Resource: !Sub 'arn:${AWS::Partition}:lambda:*:${AWS::AccountId}:function:awskr-backend-whatsnew-*'
+              - Sid: LambdaEventSources
+                Effect: Allow
+                Action:
+                  - lambda:CreateEventSourceMapping
+                  - lambda:DeleteEventSourceMapping
+                  - lambda:GetEventSourceMapping
+                  - lambda:UpdateEventSourceMapping
+                Resource: '*'
+              - Sid: BackendTable
+                Effect: Allow
+                Action:
+                  - dynamodb:CreateTable
+                  - dynamodb:DeleteTable
+                  - dynamodb:DescribeTable
+                  - dynamodb:UpdateTable
+                  - dynamodb:TagResource
+                  - dynamodb:UntagResource
+                Resource: !Sub 'arn:${AWS::Partition}:dynamodb:*:${AWS::AccountId}:table/awskr-backend-whatsnew-*'
+              - Sid: BackendQueues
+                Effect: Allow
+                Action:
+                  - sqs:CreateQueue
+                  - sqs:DeleteQueue
+                  - sqs:GetQueueAttributes
+                  - sqs:SetQueueAttributes
+                  - sqs:TagQueue
+                  - sqs:UntagQueue
+                Resource: !Sub 'arn:${AWS::Partition}:sqs:*:${AWS::AccountId}:awskr-backend-whatsnew-*'
+              - Sid: BackendRules
+                Effect: Allow
+                Action:
+                  - events:PutRule
+                  - events:DeleteRule
+                  - events:DescribeRule
+                  - events:PutTargets
+                  - events:RemoveTargets
+                  - events:ListTargetsByRule
+                Resource: !Sub 'arn:${AWS::Partition}:events:*:${AWS::AccountId}:rule/awskr-backend-whatsnew-*'
+              - Sid: BackendApi
+                Effect: Allow
+                Action:
+                  - apigateway:GET
+                  - apigateway:POST
+                  - apigateway:PATCH
+                  - apigateway:DELETE
+                Resource: !Sub 'arn:${AWS::Partition}:apigateway:*::/apis*'
+              - Sid: BackendLogGroups
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:DeleteLogGroup
+                  - logs:DescribeLogGroups
+                  - logs:PutRetentionPolicy
+                Resource: !Sub 'arn:${AWS::Partition}:logs:*:${AWS::AccountId}:log-group:/aws/lambda/awskr-backend-whatsnew-*'
+              - Sid: BackendFunctionRoles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:TagRole
+                  - iam:UntagRole
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/awskr-backend-whatsnew-*'
+              - Sid: PassBackendFunctionRoles
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/awskr-backend-whatsnew-*'
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: lambda.amazonaws.com
+              - Sid: ReadLambdaArtifacts
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::awskr-backend-artifacts-*/*'
+
+  BackendDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: awskr-backend-deploy
+      Description: GitHub Actions main branch deploy role for the awskr Whats New backend.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Ref GitHubSubjects
+      Policies:
+        - PolicyName: package-and-deploy-whats-new-backend
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: UploadArtifacts
+                Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::awskr-backend-artifacts-*/*'
+              - Sid: ReadBackendStacks
+                Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResources
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:*:${AWS::AccountId}:stack/awskr-backend-artifacts/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:*:${AWS::AccountId}:stack/awskr-backend-whatsnew/*'
+              - Sid: ValidateBackendTemplate
+                Effect: Allow
+                Action:
+                  - cloudformation:ValidateTemplate
+                  - cloudformation:GetTemplateSummary
+                Resource: '*'
+              - Sid: DeployBackendStack
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:TagResource
+                Resource: !Sub 'arn:${AWS::Partition}:cloudformation:*:${AWS::AccountId}:stack/awskr-backend-whatsnew/*'
+              - Sid: PassBackendExecutionRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt BackendCfnExecutionRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: cloudformation.amazonaws.com
+              - Sid: SeedStaticSnapshot
+                Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !Sub 'arn:${AWS::Partition}:lambda:*:${AWS::AccountId}:function:awskr-backend-whatsnew-publisher'
+              - Sid: WhoAmI
+                Effect: Allow
+                Action: sts:GetCallerIdentity
+                Resource: '*'
+
 Outputs:
+  BackendDeployRoleArn:
+    Description: Set as the GitHub repository variable AWS_BACKEND_DEPLOY_ROLE_ARN in aws-whats-new-korean.
+    Value: !GetAtt BackendDeployRole.Arn
+  BackendCfnExecutionRoleArn:
+    Value: !GetAtt BackendCfnExecutionRole.Arn
   InfraDeployRoleArn:
     Description: Set as the GitHub repository variable AWS_INFRA_ROLE_ARN in each site repo.
     Value: !GetAtt InfraDeployRole.Arn

@@ -1,0 +1,65 @@
+name: Deploy backend (Lambda + static snapshot)
+
+# Deploys the standalone CloudFormation backend when Lambda handlers or backend
+# infrastructure change. The frontend workflow remains separate because it only
+# builds and publishes the static SPA.
+#
+# Repository variable required:
+#   AWS_BACKEND_DEPLOY_ROLE_ARN  BackendDeployRoleArn from infra/bootstrap.yaml
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'functions/**'
+      - 'infra/backend/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-whats-new-backend
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-2
+  BACKEND_STACK: awskr-backend-whatsnew
+  CFN_EXECUTION_ROLE_NAME: awskr-backend-cfn-execution
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_BACKEND_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Package Lambda handlers
+        id: package
+        working-directory: infra/backend
+        run: |
+          PREFIX="$(./package.sh | awk -F= '/^ARTIFACT_PREFIX=/{print $2}')"
+          test -n "$PREFIX"
+          echo "artifact_prefix=$PREFIX" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy backend stack
+        working-directory: infra/backend
+        env:
+          ARTIFACT_PREFIX: ${{ steps.package.outputs.artifact_prefix }}
+        run: |
+          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+          export CFN_ROLE_ARN="arn:aws:iam::$ACCOUNT_ID:role/$CFN_EXECUTION_ROLE_NAME"
+          ./deploy.sh "$ARTIFACT_PREFIX" ScheduleState=ENABLED
+
+      - name: Seed static articles snapshot
+        run: |
+          RESPONSE="$RUNNER_TEMP/publisher-response.json"
+          aws lambda invoke --function-name "$BACKEND_STACK-publisher" "$RESPONSE" >/dev/null
+          cat "$RESPONSE"

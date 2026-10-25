@@ -17,6 +17,7 @@ BUCKET="$(aws cloudformation describe-stacks --region "$REGION" --stack-name aws
 
 EXTRA=()
 [ "${PREVIEW:-}" = "1" ] && EXTRA+=(--no-execute-changeset)
+[ -n "${CFN_ROLE_ARN:-}" ] && EXTRA+=(--role-arn "$CFN_ROLE_ARN")
 
 aws cloudformation deploy --region "$REGION" --stack-name "$STACK" \
   --template-file "$HERE/template.yaml" --capabilities CAPABILITY_IAM \
