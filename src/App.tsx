@@ -82,9 +82,37 @@ function timeAgo(d: string): string {
   if (days < 365) return `${Math.floor(days / 30)}개월 전`;
   return `${Math.floor(days / 365)}년 전`;
 }
+// 리전 코드 -> 한국어 이름. functions/region-resolver/handler.js의 표와 같다.
+// 표에 이름이 없던 시절 코드(예: ap-southeast-7)로 저장된 기사도 이름으로 보이게 한다.
+const REGION_NAMES: Record<string, string> = {
+  'us-east-1': '미국 동부(버지니아 북부)', 'us-east-2': '미국 동부(오하이오)',
+  'us-west-1': '미국 서부(북부 캘리포니아)', 'us-west-2': '미국 서부(오레곤)',
+  'ap-northeast-1': '아시아 태평양(도쿄)', 'ap-northeast-2': '아시아 태평양(서울)',
+  'ap-northeast-3': '아시아 태평양(오사카)', 'ap-southeast-1': '아시아 태평양(싱가포르)',
+  'ap-southeast-2': '아시아 태평양(시드니)', 'ap-southeast-3': '아시아 태평양(자카르타)',
+  'ap-southeast-4': '아시아 태평양(멜버른)', 'ap-southeast-5': '아시아 태평양(말레이시아)',
+  'ap-southeast-6': '아시아 태평양(뉴질랜드)', 'ap-southeast-7': '아시아 태평양(태국)',
+  'ap-south-1': '아시아 태평양(뭄바이)', 'ap-south-2': '아시아 태평양(하이데라바드)',
+  'ap-east-1': '아시아 태평양(홍콩)', 'ap-east-2': '아시아 태평양(타이베이)',
+  'eu-west-1': '유럽(아일랜드)', 'eu-west-2': '유럽(런던)', 'eu-west-3': '유럽(파리)',
+  'eu-central-1': '유럽(프랑크푸르트)', 'eu-central-2': '유럽(취리히)',
+  'eu-north-1': '유럽(스톡홀름)', 'eu-south-1': '유럽(밀라노)', 'eu-south-2': '유럽(스페인)',
+  'ca-central-1': '캐나다(중부)', 'ca-west-1': '캐나다 서부(캘거리)',
+  'sa-east-1': '남아메리카(상파울루)',
+  'mx-central-1': '멕시코(중부)',
+  'me-south-1': '중동(바레인)', 'me-central-1': '중동(UAE)',
+  'af-south-1': '아프리카(케이프타운)', 'il-central-1': '이스라엘(텔아비브)',
+  'us-gov-west-1': 'AWS GovCloud(미국-서부)', 'us-gov-east-1': 'AWS GovCloud(미국-동부)',
+  'cn-north-1': '중국(베이징)', 'cn-northwest-1': '중국(닝샤)',
+  'eusc-de-east-1': 'AWS European Sovereign Cloud(독일)',
+};
 function parseRegions(r: string): string[] {
   if (!r) return [];
-  return r.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+  const names = r.split(/[,;]/).map(s => s.trim()).filter(Boolean)
+    // 리전 해석기가 상용 리전만 남기기 전에 저장된 별도 파티션 코드(European Sovereign Cloud)는 뺀다.
+    .filter(s => !/^eusc-/.test(s))
+    .map(s => REGION_NAMES[s] || s);
+  return [...new Set(names)];
 }
 
 // 지연 로딩한 청크를 끝내 받지 못하면 빈 화면 대신 다시 불러오기 안내를 보여준다.
@@ -294,16 +322,25 @@ export default function App() {
             if (!t) return true;
             const haystack = [
               item.title, item.titleEn, getSummary(item.summary),
-              item.features, item.target, item.regions,
+              item.features, item.target, parseRegions(item.regions).join(', '),
             ].filter(Boolean).join(' ').toLowerCase();
             const matched = haystack.includes(t);
             return token.operator === '!=' ? !matched : matched;
           }
 
+          // 리전은 화면·필터 옵션과 같은 이름 목록으로 비교한다(저장된 코드도 이름으로 바꿔서).
+          // '='와 '!='는 여러 리전 중 하나와 같은지 본다.
+          if (token.propertyKey === 'regions') {
+            const list = parseRegions(item.regions).map(r => r.toLowerCase());
+            if (token.operator === '=') return list.includes(t);
+            if (token.operator === '!=') return !list.includes(t);
+            if (token.operator === ':') return list.join(', ').includes(t);
+            return true;
+          }
+
           let value = '';
           if (token.propertyKey === 'status') value = getStatusLabel(item.status);
           else if (token.propertyKey === 'target') value = item.target || '';
-          else if (token.propertyKey === 'regions') value = item.regions || '';
           else if (token.propertyKey === 'title') value = `${item.title} ${item.titleEn}`;
           else return true;
 
