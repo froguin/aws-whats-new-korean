@@ -136,7 +136,7 @@ const COLUMN_DEFS = [
     cell: (item: Article) => item.target ? <Box fontSize="body-s">{item.target}</Box> : <Box>-</Box>,
   },
   {
-    id: 'regions', header: '리전', width: 150,
+    id: 'regions', header: '리전', width: 200, minWidth: 160,
     cell: (item: Article) => {
       const regions = parseRegions(item.regions);
       if (regions.length === 0) return <Box>-</Box>;
@@ -149,7 +149,15 @@ const COLUMN_DEFS = [
             triggerType="text"
             content={<Box fontSize="body-s">{text}</Box>}
           >
-          <Box fontSize="body-s" color="text-body-secondary">{regions.length <= 2 ? <span style={{display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px'}}>{text}</span> : <>{regions[0]} <Badge>+{regions.length - 1}</Badge></>}</Box>
+          <Box fontSize="body-s" color="text-body-secondary">
+            {/* 셀 너비보다 길어지면 잘리지 않고 말줄임표로 줄인다. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                {regions.length <= 2 ? text : regions[0]}
+              </span>
+              {regions.length > 2 && <Badge>+{regions.length - 1}</Badge>}
+            </div>
+          </Box>
           </Popover>
         </div>
       );
