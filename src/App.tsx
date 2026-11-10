@@ -87,6 +87,23 @@ function parseRegions(r: string): string[] {
   return r.split(/[,;]/).map(s => s.trim()).filter(Boolean);
 }
 
+// 지연 로딩한 청크를 끝내 받지 못하면 빈 화면 대신 다시 불러오기 안내를 보여준다.
+class ChunkErrorBoundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <Box textAlign="center" padding="l">
+        <SpaceBetween size="s">
+          <Box>화면을 불러오지 못했습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.</Box>
+          <Button iconName="refresh" onClick={() => window.location.reload()}>새로고침</Button>
+        </SpaceBetween>
+      </Box>
+    );
+  }
+}
+
 function useIsMobile() {
   const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 768px)').matches);
   useEffect(() => {
@@ -597,9 +614,11 @@ export default function App() {
       splitPanel={!isMobile ? <Suspense fallback={null}>{splitPanel}</Suspense> : undefined}
       notifications={<Flashbar items={flashItems} />}
       content={
-        <Suspense fallback={<Box textAlign="center" padding="l" color="text-body-secondary">불러오는 중...</Box>}>
-          {isMobile ? (detail ? mobileDetail : mobileCards) : desktopTable}
-        </Suspense>
+        <ChunkErrorBoundary>
+          <Suspense fallback={<Box textAlign="center" padding="l" color="text-body-secondary">불러오는 중...</Box>}>
+            {isMobile ? (detail ? mobileDetail : mobileCards) : desktopTable}
+          </Suspense>
+        </ChunkErrorBoundary>
       }
     />
     <div style={{ backgroundColor: 'var(--color-background-cell-shaded, transparent)' }}>
