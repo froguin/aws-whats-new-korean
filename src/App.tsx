@@ -139,13 +139,17 @@ const COLUMN_DEFS = [
   },
   {
     id: 'title', header: '제목', sortingField: 'title',
+    // 줄 바꿈 설정이 꺼져 있어도 제목은 줄을 바꾼다. 긴 제목이 표를 화면보다 넓혀
+    // 오른쪽 리전 칸을 밀어내고 가로 스크롤을 만드는 것을 막는다.
     cell: (item: Article) => (
-      <SpaceBetween direction="vertical" size="xxxs">
-        <Box fontWeight="bold">{item.title || item.titleEn}</Box>
-        {item.titleEn && item.title !== item.titleEn && (
-          <Box fontSize="body-s" color="text-body-secondary">{item.titleEn}</Box>
-        )}
-      </SpaceBetween>
+      <div style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+        <SpaceBetween direction="vertical" size="xxxs">
+          <Box fontWeight="bold">{item.title || item.titleEn}</Box>
+          {item.titleEn && item.title !== item.titleEn && (
+            <Box fontSize="body-s" color="text-body-secondary">{item.titleEn}</Box>
+          )}
+        </SpaceBetween>
+      </div>
     ),
   },
   {
@@ -168,7 +172,7 @@ const COLUMN_DEFS = [
           >
           <Box fontSize="body-s" color="text-body-secondary">
             {/* 셀 너비보다 길어지면 잘리지 않고 말줄임표로 줄인다. */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, maxWidth: 176 }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
                 {regions.length <= 2 ? text : regions[0]}
               </span>
