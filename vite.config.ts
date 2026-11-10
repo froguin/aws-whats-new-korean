@@ -24,7 +24,7 @@ function cloudscapeFontToken(): Plugin {
       hash = found[0];
     },
     transform(code, id) {
-      if (!id.split('?')[0].endsWith('/src/fonts.css')) return null;
+      if (!id.split('?')[0].replace(/\\/g, '/').endsWith('/src/fonts.css')) return null;
       if (!code.includes(PLACEHOLDER)) this.error(`${PLACEHOLDER} not found in src/fonts.css`);
       return { code: code.replaceAll(PLACEHOLDER, hash), map: null };
     },
