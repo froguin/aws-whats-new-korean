@@ -13,4 +13,7 @@ window.addEventListener('vite:preloadError', () => {
   window.location.reload();
 });
 
+// 정상적으로 뜬 뒤에는 표시를 지워서, 다음 배포 때도 한 번 더 복구할 수 있게 한다.
+window.addEventListener('load', () => setTimeout(() => sessionStorage.removeItem('chunk-reload'), 5000));
+
 createRoot(document.getElementById('root')!).render(<App />);
