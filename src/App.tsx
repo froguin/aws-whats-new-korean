@@ -322,16 +322,25 @@ export default function App() {
             if (!t) return true;
             const haystack = [
               item.title, item.titleEn, getSummary(item.summary),
-              item.features, item.target, item.regions,
+              item.features, item.target, parseRegions(item.regions).join(', '),
             ].filter(Boolean).join(' ').toLowerCase();
             const matched = haystack.includes(t);
             return token.operator === '!=' ? !matched : matched;
           }
 
+          // 리전은 화면·필터 옵션과 같은 이름 목록으로 비교한다(저장된 코드도 이름으로 바꿔서).
+          // '='와 '!='는 여러 리전 중 하나와 같은지 본다.
+          if (token.propertyKey === 'regions') {
+            const list = parseRegions(item.regions).map(r => r.toLowerCase());
+            if (token.operator === '=') return list.includes(t);
+            if (token.operator === '!=') return !list.includes(t);
+            if (token.operator === ':') return list.join(', ').includes(t);
+            return true;
+          }
+
           let value = '';
           if (token.propertyKey === 'status') value = getStatusLabel(item.status);
           else if (token.propertyKey === 'target') value = item.target || '';
-          else if (token.propertyKey === 'regions') value = item.regions || '';
           else if (token.propertyKey === 'title') value = `${item.title} ${item.titleEn}`;
           else return true;
 
