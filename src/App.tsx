@@ -1,9 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import AppLayout from '@cloudscape-design/components/app-layout';
-import Table from '@cloudscape-design/components/table';
-import Cards from '@cloudscape-design/components/cards';
 import Box from '@cloudscape-design/components/box';
-import SplitPanel from '@cloudscape-design/components/split-panel';
 import Alert from '@cloudscape-design/components/alert';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import Link from '@cloudscape-design/components/link';
@@ -14,12 +11,18 @@ import Button from '@cloudscape-design/components/button';
 import Header from '@cloudscape-design/components/header';
 import PropertyFilter from '@cloudscape-design/components/property-filter';
 import Badge from '@cloudscape-design/components/badge';
-import CollectionPreferences from '@cloudscape-design/components/collection-preferences';
 import ColumnLayout from '@cloudscape-design/components/column-layout';
 import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
 import Flashbar from '@cloudscape-design/components/flashbar';
 import Popover from '@cloudscape-design/components/popover';
 import { applyMode, Mode } from '@cloudscape-design/global-styles';
+
+// 화면 폭에 따라 한쪽만 쓰는 Table(PC)/Cards(모바일)와 설정 모달은 필요할 때 따로 내려받는다.
+// 제네릭 컴포넌트의 타입이 지워지지 않도록 원래 타입으로 단언한다.
+const Table = lazy(() => import('@cloudscape-design/components/table')) as unknown as typeof import('@cloudscape-design/components/table').default;
+const SplitPanel = lazy(() => import('@cloudscape-design/components/split-panel')) as unknown as typeof import('@cloudscape-design/components/split-panel').default;
+const Cards = lazy(() => import('@cloudscape-design/components/cards')) as unknown as typeof import('@cloudscape-design/components/cards').default;
+const CollectionPreferences = lazy(() => import('@cloudscape-design/components/collection-preferences')) as unknown as typeof import('@cloudscape-design/components/collection-preferences').default;
 
 interface Summary { what_changed?: string; why_it_matters?: string }
 interface Article {
@@ -84,6 +87,23 @@ function parseRegions(r: string): string[] {
   return r.split(/[,;]/).map(s => s.trim()).filter(Boolean);
 }
 
+// 지연 로딩한 청크를 끝내 받지 못하면 빈 화면 대신 다시 불러오기 안내를 보여준다.
+class ChunkErrorBoundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <Box textAlign="center" padding="l">
+        <SpaceBetween size="s">
+          <Box>화면을 불러오지 못했습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.</Box>
+          <Button iconName="refresh" onClick={() => window.location.reload()}>새로고침</Button>
+        </SpaceBetween>
+      </Box>
+    );
+  }
+}
+
 function useIsMobile() {
   const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 768px)').matches);
   useEffect(() => {
@@ -133,7 +153,7 @@ const COLUMN_DEFS = [
     cell: (item: Article) => item.target ? <Box fontSize="body-s">{item.target}</Box> : <Box>-</Box>,
   },
   {
-    id: 'regions', header: '리전', width: 150,
+    id: 'regions', header: '리전', width: 200, minWidth: 160,
     cell: (item: Article) => {
       const regions = parseRegions(item.regions);
       if (regions.length === 0) return <Box>-</Box>;
@@ -146,7 +166,15 @@ const COLUMN_DEFS = [
             triggerType="text"
             content={<Box fontSize="body-s">{text}</Box>}
           >
-          <Box fontSize="body-s" color="text-body-secondary">{regions.length <= 2 ? <span style={{display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px'}}>{text}</span> : <>{regions[0]} <Badge>+{regions.length - 1}</Badge></>}</Box>
+          <Box fontSize="body-s" color="text-body-secondary">
+            {/* 셀 너비보다 길어지면 잘리지 않고 말줄임표로 줄인다. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                {regions.length <= 2 ? text : regions[0]}
+              </span>
+              {regions.length > 2 && <Badge>+{regions.length - 1}</Badge>}
+            </div>
+          </Box>
           </Popover>
         </div>
       );
@@ -536,6 +564,7 @@ export default function App() {
       filter={propertyFilterEl}
       pagination={paginationEl}
       preferences={
+        <Suspense fallback={null}>
         <CollectionPreferences
           title="환경 설정"
           confirmLabel="확인"
@@ -550,6 +579,7 @@ export default function App() {
           wrapLinesPreference={{ label: '줄 바꿈', description: '긴 텍스트를 줄 바꿈하여 표시합니다.' }}
           stripedRowsPreference={{ label: '줄무늬 행', description: '행을 번갈아 음영 처리합니다.' }}
         />
+        </Suspense>
       }
       columnDefinitions={visibleColumns}
       empty={emptyContent}
@@ -581,9 +611,15 @@ export default function App() {
       splitPanelOpen={!isMobile && splitOpen}
       onSplitPanelToggle={({ detail }) => { setSplitOpen(detail.open); if (!detail.open) setSelectedItems([]); }}
       splitPanelPreferences={{ position: 'bottom' }}
-      splitPanel={!isMobile ? splitPanel : undefined}
+      splitPanel={!isMobile ? <Suspense fallback={null}>{splitPanel}</Suspense> : undefined}
       notifications={<Flashbar items={flashItems} />}
-      content={isMobile ? (detail ? mobileDetail : mobileCards) : desktopTable}
+      content={
+        <ChunkErrorBoundary>
+          <Suspense fallback={<Box textAlign="center" padding="l" color="text-body-secondary">불러오는 중...</Box>}>
+            {isMobile ? (detail ? mobileDetail : mobileCards) : desktopTable}
+          </Suspense>
+        </ChunkErrorBoundary>
+      }
     />
     <div style={{ backgroundColor: 'var(--color-background-cell-shaded, transparent)' }}>
       <Box textAlign="center" padding="s" color="text-body-secondary" fontSize="body-s">
