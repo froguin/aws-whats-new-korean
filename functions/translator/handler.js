@@ -17,18 +17,20 @@ const REGION_MAP = {
   'Asia Pacific (Mumbai)': '아시아 태평양(뭄바이)', 'Asia Pacific (Hong Kong)': '아시아 태평양(홍콩)',
   'Asia Pacific (Jakarta)': '아시아 태평양(자카르타)', 'Asia Pacific (Hyderabad)': '아시아 태평양(하이데라바드)',
   'Asia Pacific (Malaysia)': '아시아 태평양(말레이시아)', 'Asia Pacific (Thailand)': '아시아 태평양(태국)',
+  'Asia Pacific (New Zealand)': '아시아 태평양(뉴질랜드)', 'Asia Pacific (Taipei)': '아시아 태평양(타이베이)',
   'Europe (Ireland)': '유럽(아일랜드)', 'Europe (London)': '유럽(런던)',
   'Europe (Frankfurt)': '유럽(프랑크푸르트)', 'Europe (Paris)': '유럽(파리)',
   'Europe (Stockholm)': '유럽(스톡홀름)', 'Europe (Milan)': '유럽(밀라노)',
   'Europe (Spain)': '유럽(스페인)', 'Europe (Zurich)': '유럽(취리히)',
   'Canada (Central)': '캐나다(중부)', 'Canada West (Calgary)': '캐나다 서부(캘거리)',
   'South America (Sao Paulo)': '남아메리카(상파울루)',
+  'Mexico (Central)': '멕시코(중부)',
   'Middle East (Bahrain)': '중동(바레인)', 'Middle East (UAE)': '중동(UAE)',
   'Africa (Cape Town)': '아프리카(케이프타운)', 'Israel (Tel Aviv)': '이스라엘(텔아비브)',
   'AWS GovCloud (US-East)': 'AWS GovCloud(미국-동부)', 'AWS GovCloud (US-West)': 'AWS GovCloud(미국-서부)',
 };
-const AVAIL_REGION_RE = /(?:available|supported|launched?)\s+in\s+[^.]*?(?:US East|US West|Europe|Asia Pacific|Canada West|Canada|South America|Middle East|Africa|Israel|AWS GovCloud|China)\s*\(([^)]+)\)/gi;
-const INDIVIDUAL_RE = /(?:US East|US West|Europe|Asia Pacific|Canada West|Canada|South America|Middle East|Africa|Israel|AWS GovCloud|China)\s*\(([^)]+)\)/g;
+const AVAIL_REGION_RE = /(?:available|supported|launched?)\s+in\s+[^.]*?(?:US East|US West|Europe|Asia Pacific|Canada West|Canada|South America|Middle East|Mexico|Africa|Israel|AWS GovCloud|China)\s*\(([^)]+)\)/gi;
+const INDIVIDUAL_RE = /(?:US East|US West|Europe|Asia Pacific|Canada West|Canada|South America|Middle East|Mexico|Africa|Israel|AWS GovCloud|China)\s*\(([^)]+)\)/g;
 
 function extractRegionsFromText(description) {
   if (!description) return new Set();
@@ -96,7 +98,7 @@ const RULES = `<rules>
   - 절차 안내 문맥("use the console in...", "request through...")에서 언급된 리전은 제외
   - "except" 뒤의 리전은 제외 리전이므로 추출하지 않음
   - 리전 정보가 없거나 불명확하면 "모든 AWS 리전"
-  - 리전명 변환표: US East (N. Virginia)→미국 동부(버지니아 북부), US East (Ohio)→미국 동부(오하이오), US West (Oregon)→미국 서부(오레곤), US West (N. California)→미국 서부(북부 캘리포니아), Asia Pacific (Seoul)→아시아 태평양(서울), Asia Pacific (Tokyo)→아시아 태평양(도쿄), Asia Pacific (Singapore)→아시아 태평양(싱가포르), Asia Pacific (Sydney)→아시아 태평양(시드니), Asia Pacific (Mumbai)→아시아 태평양(뭄바이), Europe (Ireland)→유럽(아일랜드), Europe (Frankfurt)→유럽(프랑크푸르트), Europe (London)→유럽(런던), Canada (Central)→캐나다(중부), AWS GovCloud (US-West)→AWS GovCloud(미국-서부), AWS GovCloud (US-East)→AWS GovCloud(미국-동부) 등
+  - 리전명 변환표: US East (N. Virginia)→미국 동부(버지니아 북부), US East (Ohio)→미국 동부(오하이오), US West (Oregon)→미국 서부(오레곤), US West (N. California)→미국 서부(북부 캘리포니아), Asia Pacific (Seoul)→아시아 태평양(서울), Asia Pacific (Tokyo)→아시아 태평양(도쿄), Asia Pacific (Singapore)→아시아 태평양(싱가포르), Asia Pacific (Sydney)→아시아 태평양(시드니), Asia Pacific (Mumbai)→아시아 태평양(뭄바이), Europe (Ireland)→유럽(아일랜드), Europe (Frankfurt)→유럽(프랑크푸르트), Europe (London)→유럽(런던), Canada (Central)→캐나다(중부), AWS GovCloud (US-West)→AWS GovCloud(미국-서부), AWS GovCloud (US-East)→AWS GovCloud(미국-동부), Asia Pacific (Taipei)→아시아 태평양(타이베이), Asia Pacific (Thailand)→아시아 태평양(태국), Asia Pacific (New Zealand)→아시아 태평양(뉴질랜드), Mexico (Central)→멕시코(중부) 등
 </rules>`;
 
 const KOREAN_STYLE = `<korean-style>

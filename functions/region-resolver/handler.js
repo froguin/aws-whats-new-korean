@@ -13,6 +13,7 @@ const REGION_MAP = {
   'ap-northeast-3': '아시아 태평양(오사카)', 'ap-southeast-1': '아시아 태평양(싱가포르)',
   'ap-southeast-2': '아시아 태평양(시드니)', 'ap-southeast-3': '아시아 태평양(자카르타)',
   'ap-southeast-4': '아시아 태평양(멜버른)', 'ap-southeast-5': '아시아 태평양(말레이시아)',
+  'ap-southeast-6': '아시아 태평양(뉴질랜드)', 'ap-southeast-7': '아시아 태평양(태국)',
   'ap-south-1': '아시아 태평양(뭄바이)', 'ap-south-2': '아시아 태평양(하이데라바드)',
   'ap-east-1': '아시아 태평양(홍콩)', 'ap-east-2': '아시아 태평양(타이베이)',
   'eu-west-1': '유럽(아일랜드)', 'eu-west-2': '유럽(런던)', 'eu-west-3': '유럽(파리)',
@@ -20,10 +21,12 @@ const REGION_MAP = {
   'eu-north-1': '유럽(스톡홀름)', 'eu-south-1': '유럽(밀라노)', 'eu-south-2': '유럽(스페인)',
   'ca-central-1': '캐나다(중부)', 'ca-west-1': '캐나다 서부(캘거리)',
   'sa-east-1': '남아메리카(상파울루)',
+  'mx-central-1': '멕시코(중부)',
   'me-south-1': '중동(바레인)', 'me-central-1': '중동(UAE)',
   'af-south-1': '아프리카(케이프타운)', 'il-central-1': '이스라엘(텔아비브)',
   'us-gov-west-1': 'AWS GovCloud(미국-서부)', 'us-gov-east-1': 'AWS GovCloud(미국-동부)',
   'cn-north-1': '중국(베이징)', 'cn-northwest-1': '중국(닝샤)',
+  'eusc-de-east-1': 'AWS European Sovereign Cloud(독일)',
 };
 
 async function getServiceRegions(serviceName) {
@@ -49,9 +52,13 @@ export const handler = async (event) => {
         console.log(`NO_REGIONS ${guid}: service=${service}`);
         continue;
       }
+      // 상용 리전만: 중국, GovCloud, European Sovereign Cloud는 별도 파티션이라 뺀다.
+      // 코드로 거르고 나서 이름을 붙여야 이름표에 있는 별도 파티션 리전도 빠진다.
+      const unmapped = regionIds.filter(id => !REGION_MAP[id]);
+      if (unmapped.length) console.log(`UNMAPPED_REGIONS ${guid}: ${unmapped.join(',')}`);
       const regionNames = regionIds
+        .filter(id => !/^(cn|us-gov|eusc)-/.test(id))
         .map(id => REGION_MAP[id] || id)
-        .filter(r => !r.startsWith('cn-') && !r.startsWith('us-gov-')) // 상용 리전만
         .sort();
       const regionsStr = regionNames.join(', ');
 
