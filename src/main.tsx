@@ -6,4 +6,11 @@ import './fonts.css';
 
 import App from './App';
 
+// 배포 직후 열려 있던 탭은 예전 청크 이름이 404가 될 수 있다. 한 번만 새로고침해 새 빌드를 받는다.
+window.addEventListener('vite:preloadError', () => {
+  if (sessionStorage.getItem('chunk-reload')) return;
+  sessionStorage.setItem('chunk-reload', '1');
+  window.location.reload();
+});
+
 createRoot(document.getElementById('root')!).render(<App />);
