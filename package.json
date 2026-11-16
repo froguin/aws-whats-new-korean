@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@cloudscape-design/components": "~3.0.1410",
+    "@cloudscape-design/components": "~3.0.1413",
     "@cloudscape-design/global-styles": "~1.0.72",
     "react": "~19.3.0",
     "react-dom": "~19.3.0"
@@ -18,8 +18,8 @@
     "@types/node": "~26.6.6",
     "@types/react": "~19.3.0",
     "@types/react-dom": "~19.3.0",
-    "@vitejs/plugin-react": "~6.2.1",
+    "@vitejs/plugin-react": "~6.3.0",
     "typescript": "~7.0.2",
-    "vite": "~8.3.6"
+    "vite": "~8.3.8"
   }
 }
