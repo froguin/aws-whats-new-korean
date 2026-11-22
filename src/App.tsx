@@ -106,13 +106,32 @@ const REGION_NAMES: Record<string, string> = {
   'cn-north-1': '중국(베이징)', 'cn-northwest-1': '중국(닝샤)',
   'eusc-de-east-1': 'AWS European Sovereign Cloud(독일)',
 };
+// 번역기는 글로벌 서비스나 리전이 불명확한 기사에 '모든 AWS 리전'을 저장한다.
+// 화면에는 '전체 리전'으로 보이고, 리전 필터와 검색에서는 상용 리전 전체를 가진 것으로 본다.
+const ALL_REGIONS_STORED = '모든 AWS 리전';
+const ALL_REGIONS_LABEL = '전체 리전';
+// 상용 리전만(리전 해석기와 같은 기준): 중국, GovCloud, European Sovereign Cloud는 별도 파티션이라 뺀다.
+const COMMERCIAL_REGION_NAMES = Object.entries(REGION_NAMES)
+  .filter(([code]) => !/^(cn|us-gov|eusc)-/.test(code))
+  .map(([, name]) => name);
+
+// 화면용: 표, 상세, 필터 드롭다운 옵션
 function parseRegions(r: string): string[] {
   if (!r) return [];
   const names = r.split(/[,;]/).map(s => s.trim()).filter(Boolean)
     // 리전 해석기가 상용 리전만 남기기 전에 저장된 별도 파티션 코드(European Sovereign Cloud)는 뺀다.
     .filter(s => !/^eusc-/.test(s))
-    .map(s => REGION_NAMES[s] || s);
+    .map(s => (s === ALL_REGIONS_STORED ? ALL_REGIONS_LABEL : REGION_NAMES[s] || s));
   return [...new Set(names)];
+}
+
+// 필터·검색용: '전체 리전' 기사는 상용 리전 이름을 모두 가진 것으로 본다.
+// 예전 문구('모든 AWS 리전')로 검색해도 걸리게 원래 저장값도 넣는다.
+function regionsForMatch(r: string): string[] {
+  const list = parseRegions(r);
+  return list.includes(ALL_REGIONS_LABEL)
+    ? [...new Set([...list, ALL_REGIONS_STORED, ...COMMERCIAL_REGION_NAMES])]
+    : list;
 }
 
 // 지연 로딩한 청크를 끝내 받지 못하면 빈 화면 대신 다시 불러오기 안내를 보여준다.
@@ -322,16 +341,16 @@ export default function App() {
             if (!t) return true;
             const haystack = [
               item.title, item.titleEn, getSummary(item.summary),
-              item.features, item.target, parseRegions(item.regions).join(', '),
+              item.features, item.target, regionsForMatch(item.regions).join(', '),
             ].filter(Boolean).join(' ').toLowerCase();
             const matched = haystack.includes(t);
             return token.operator === '!=' ? !matched : matched;
           }
 
           // 리전은 화면·필터 옵션과 같은 이름 목록으로 비교한다(저장된 코드도 이름으로 바꿔서).
-          // '='와 '!='는 여러 리전 중 하나와 같은지 본다.
+          // '='와 '!='는 여러 리전 중 하나와 같은지 본다. '전체 리전' 기사는 모든 상용 리전에 걸린다.
           if (token.propertyKey === 'regions') {
-            const list = parseRegions(item.regions).map(r => r.toLowerCase());
+            const list = regionsForMatch(item.regions).map(r => r.toLowerCase());
             if (token.operator === '=') return list.includes(t);
             if (token.operator === '!=') return !list.includes(t);
             if (token.operator === ':') return list.join(', ').includes(t);
