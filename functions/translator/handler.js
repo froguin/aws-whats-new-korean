@@ -91,7 +91,7 @@ const RULES = `<rules>
 - features: 쉼표 구분, 최대 3개, 총 80자
 - regions: 서비스가 실제로 가용한(available/supported/launched) 리전만 추출. 아래 규칙 준수:
   - "all regions" 또는 글로벌 서비스 → "모든 AWS 리전"
-  - "available in all regions where X is available" 패턴 → "__SERVICE__:서비스코드" (예: "__SERVICE__:eks", "__SERVICE__:lambda")
+  - "available in all regions where X is available" 패턴 → "__SERVICE__:서비스코드" (예: "__SERVICE__:eks", "__SERVICE__:lambda"). 콜론 뒤에는 서비스 코드 하나만 쓰고 리전 코드를 붙이지 말 것. 구체적 리전이 나열돼 있으면 이 형식 대신 리전을 나열
   - 구체적 리전이 나열된 경우 → 나열된 리전을 하나도 빠짐없이 모두 추출하여 한국어로 변환. US East, US West 포함 절대 누락 금지
   - 출력 형식: 각 리전을 "지역(도시)" 형태로 개별 나열. 쉼표로 구분. 하나의 괄호 안에 여러 도시 묶지 말 것 (예: "아시아 태평양(도쿄), 아시아 태평양(서울)" O, "아시아 태평양(도쿄, 서울)" X)
   - "모든 AWS 리전"과 구체적 리전을 혼합하지 말 것. 글로벌이면 "모든 AWS 리전"만 출력
