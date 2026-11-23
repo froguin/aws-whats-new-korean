@@ -44,10 +44,14 @@ const getServiceRegions = (serviceName) =>
   getAllPages(`/aws/service/global-infrastructure/services/${serviceName}/regions`);
 
 // Service codes in SSM, loaded once per container and only when a lookup misses.
-let serviceCodes;
-async function getServiceCodes() {
-  if (!serviceCodes) serviceCodes = await getAllPages('/aws/service/global-infrastructure/services');
-  return serviceCodes;
+// The promise is cached so overlapping callers share one fetch; a failed fetch is retried next time.
+let serviceCodesPromise;
+function getServiceCodes() {
+  if (!serviceCodesPromise) {
+    serviceCodesPromise = getAllPages('/aws/service/global-infrastructure/services')
+      .catch((e) => { serviceCodesPromise = undefined; throw e; });
+  }
+  return serviceCodesPromise;
 }
 
 const REGION_CODE = /^[a-z]{2}(-gov|-iso[a-z]*)?-[a-z]+-\d$/;
@@ -94,7 +98,7 @@ export const handler = async (event) => {
         console.log(`NO_REGIONS ${guid}: service=${service}`);
         continue;
       }
-      if (via !== service) console.log(`RESOLVED_VIA ${guid}: service=${service} -> ${via}`);
+      if (via !== parseServiceHint(service).service) console.log(`RESOLVED_VIA ${guid}: service=${service} -> ${via}`);
       // 상용 리전만: 중국, GovCloud, European Sovereign Cloud는 별도 파티션이라 뺀다.
       // 코드로 거르고 나서 이름을 붙여야 이름표에 있는 별도 파티션 리전도 빠진다.
       const unmapped = regionIds.filter(id => !REGION_MAP[id]);
