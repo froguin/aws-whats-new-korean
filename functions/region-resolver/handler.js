@@ -29,29 +29,72 @@ const REGION_MAP = {
   'eusc-de-east-1': 'AWS European Sovereign Cloud(독일)',
 };
 
-async function getServiceRegions(serviceName) {
-  const regions = [];
+async function getAllPages(path) {
+  const values = [];
   let nextToken;
   do {
-    const resp = await ssm.send(new GetParametersByPathCommand({
-      Path: `/aws/service/global-infrastructure/services/${serviceName}/regions`,
-      NextToken: nextToken,
-    }));
-    for (const p of resp.Parameters || []) regions.push(p.Value);
+    const resp = await ssm.send(new GetParametersByPathCommand({ Path: path, NextToken: nextToken }));
+    for (const p of resp.Parameters || []) values.push(p.Value);
     nextToken = resp.NextToken;
   } while (nextToken);
-  return regions;
+  return values;
+}
+
+const getServiceRegions = (serviceName) =>
+  getAllPages(`/aws/service/global-infrastructure/services/${serviceName}/regions`);
+
+// Service codes in SSM, loaded once per container and only when a lookup misses.
+let serviceCodes;
+async function getServiceCodes() {
+  if (!serviceCodes) serviceCodes = await getAllPages('/aws/service/global-infrastructure/services');
+  return serviceCodes;
+}
+
+const REGION_CODE = /^[a-z]{2}(-gov|-iso[a-z]*)?-[a-z]+-\d$/;
+
+// The translator asks the model for "__SERVICE__:<service code>". The model does not know SSM's
+// codes, so it sometimes writes a near miss ("devops-agent" for "aws-devops-agent") or tacks the
+// launch regions onto the code ("ec2:il-central-1"). Split those apart here.
+export function parseServiceHint(raw) {
+  const [service, ...rest] = String(raw || '').trim().toLowerCase().split(':');
+  const regions = rest.join(':').split(/[\s,;]+/).filter(s => REGION_CODE.test(s));
+  return { service, regions };
+}
+
+// Pick the SSM service code the model meant, or null. Only unambiguous matches are used:
+// an exact code, the code with an aws-/amazon- prefix, or the same letters ignoring dashes.
+export function matchServiceCode(service, codes) {
+  if (!service) return null;
+  const set = new Set(codes);
+  for (const c of [service, `aws-${service}`, `amazon-${service}`]) if (set.has(c)) return c;
+  const squash = (s) => s.replace(/^(aws|amazon)-/, '').replace(/[^a-z0-9]/g, '');
+  const hits = codes.filter(c => squash(c) === squash(service));
+  return hits.length === 1 ? hits[0] : null;
+}
+
+async function resolveRegionIds(raw) {
+  const { service, regions } = parseServiceHint(raw);
+  if (regions.length) return { ids: regions, via: 'region codes in hint' };
+  let ids = await getServiceRegions(service);
+  if (ids.length) return { ids, via: service };
+  const code = matchServiceCode(service, await getServiceCodes());
+  if (code && code !== service) {
+    ids = await getServiceRegions(code);
+    if (ids.length) return { ids, via: code };
+  }
+  return { ids: [], via: null };
 }
 
 export const handler = async (event) => {
   for (const rec of event.Records) {
     const { guid, service } = JSON.parse(rec.body);
     try {
-      const regionIds = await getServiceRegions(service);
+      const { ids: regionIds, via } = await resolveRegionIds(service);
       if (regionIds.length === 0) {
         console.log(`NO_REGIONS ${guid}: service=${service}`);
         continue;
       }
+      if (via !== service) console.log(`RESOLVED_VIA ${guid}: service=${service} -> ${via}`);
       // 상용 리전만: 중국, GovCloud, European Sovereign Cloud는 별도 파티션이라 뺀다.
       // 코드로 거르고 나서 이름을 붙여야 이름표에 있는 별도 파티션 리전도 빠진다.
       const unmapped = regionIds.filter(id => !REGION_MAP[id]);
