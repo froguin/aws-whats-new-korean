@@ -67,7 +67,9 @@ function normalizeRegionList(regions) {
 }
 
 function mergeRegions(llmRegions, regexRegions) {
-  if (!llmRegions || llmRegions.startsWith('__SERVICE__:')) return llmRegions;
+  if (llmRegions.startsWith('__SERVICE__:')) return llmRegions;
+  // '' = 모델이 비상용 리전만 있다고 판단. 원문 정규식이 상용 리전을 찾았으면 그것만 쓴다.
+  if (!llmRegions) return [...regexRegions].join(', ');
   // If LLM says "모든 AWS 리전" (possibly with extras), normalize
   if (llmRegions.includes('모든 AWS 리전')) return '모든 AWS 리전';
   const normalized = normalizeRegionList(llmRegions);
@@ -93,6 +95,7 @@ const RULES = `<rules>
 - regions: 서비스가 실제로 가용한(available/supported/launched) 리전만 추출. 아래 규칙 준수:
   - "all regions" 또는 글로벌 서비스 → "모든 AWS 리전" (정확히 이 문구. "모든 상용 리전", "모든 상업용 및 GovCloud 리전" 같은 변형 금지)
   - 상용 리전만 다룸: AWS GovCloud(US), 중국, AWS European Sovereign Cloud는 추출하지 않음
+  - 이런 비상용 리전에서만 출시된 경우 → "" (빈 문자열). "모든 AWS 리전"으로 쓰지 말 것
   - 로컬 영역(Local Zone), 엣지 로케이션, 파트너 메트로, CRIS 프로파일 이름은 리전이 아니므로 출력하지 않음
   - "available in all regions where X is available" 패턴 → "__SERVICE__:서비스코드" (예: "__SERVICE__:eks", "__SERVICE__:lambda"). 콜론 뒤에는 서비스 코드 하나만 쓰고 리전 코드를 붙이지 말 것. 구체적 리전이 나열돼 있으면 이 형식 대신 리전을 나열
   - 구체적 리전이 나열된 경우 → 나열된 리전을 하나도 빠짐없이 모두 추출하여 한국어로 변환. US East, US West 포함 절대 누락 금지
@@ -231,7 +234,9 @@ export const handler = async (event) => {
 
       const ft = Array.isArray(r.features) ? r.features.join(', ') : (r.features || '');
       const regexRegions = extractRegionsFromText(description);
-      const merged = mergeRegions(r.regions || '모든 AWS 리전', regexRegions);
+      // 필드가 없으면 '모든 AWS 리전', 빈 문자열이면 비상용 리전 전용(빈 값 유지).
+      const llmRegions = r.regions == null ? '모든 AWS 리전' : String(r.regions).trim();
+      const merged = mergeRegions(llmRegions, regexRegions);
       const serviceMatch = merged.match(/^__SERVICE__:(.+)$/);
       // 표준 이름·'모든 AWS 리전'·서비스 표시 중 하나로 맞춘다(상용 리전 외와 리전이 아닌 값은 뺀다).
       const { value: regionsVal, dropped } = serviceMatch ? { value: merged, dropped: [] } : canonicalizeRegions(merged);
