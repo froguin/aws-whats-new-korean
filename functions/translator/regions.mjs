@@ -54,13 +54,17 @@ const SERVICE_MARKER = /^\S+ 가용 리전$/;
 const ALL_PHRASE = /(모든|전체)/;
 // Other partitions: China, GovCloud, European Sovereign Cloud (Germany has no commercial region).
 const OTHER_PARTITION = /(govcloud|중국|china|주권|sovereign|^유럽\(독일\)$|^(cn|us-gov|eusc)-)/i;
+const COMMERCIAL_WORD = /(상업용|상용|commercial)/i;
 const REGION_CODE = /^[a-z]{2}-[a-z]+-\d$/;
 
 // Returns { value, dropped }: `value` is what to store, `dropped` lists the parts that were
 // removed as not a commercial region (for logging).
 export function canonicalizeRegions(raw) {
   const text = String(raw ?? '').trim();
-  if (!text) return { value: ALL_REGIONS, dropped: [] };
+  // Empty means "no commercial region" (GovCloud-only, set by this function or the region
+  // resolver). Keep it so a second run is a no-op. The translator substitutes ALL_REGIONS for an
+  // empty model answer before calling this.
+  if (!text) return { value: '', dropped: [] };
   if (SERVICE_MARKER.test(text) || text.startsWith('__SERVICE__:')) return { value: text, dropped: [] };
 
   const parts = text.split(/[,;]/).map(s => s.trim()).filter(Boolean);
@@ -69,8 +73,10 @@ export function canonicalizeRegions(raw) {
   for (const p of parts) {
     if (NAMES.has(p)) { kept.push(p); continue; }
     if (REGION_CODE.test(p) && COMMERCIAL_REGIONS[p]) { kept.push(COMMERCIAL_REGIONS[p]); continue; }
-    // "all commercial (and GovCloud) regions" counts as all regions, before the partition check.
-    if (ALL_PHRASE.test(p)) { all = true; continue; }
+    // "all (commercial) regions" counts as all regions. A phrase that names another partition
+    // ('모든 AWS GovCloud(미국) 리전', '중국 전체 리전') counts only if it also says commercial
+    // ('모든 상업용 및 AWS GovCloud(미국) 리전').
+    if (ALL_PHRASE.test(p) && (!OTHER_PARTITION.test(p) || COMMERCIAL_WORD.test(p))) { all = true; continue; }
     if (OTHER_PARTITION.test(p)) { otherPartition = true; dropped.push(p); continue; }
     const city = p.match(/\(([^)]+)\)$/)?.[1];
     if (city && BY_CITY.has(city)) { kept.push(BY_CITY.get(city)); continue; }
