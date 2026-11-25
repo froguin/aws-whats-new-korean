@@ -54,6 +54,7 @@ const SERVICE_MARKER = /^\S+ 가용 리전$/;
 const ALL_PHRASE = /(모든|전체)/;
 // Other partitions: China, GovCloud, European Sovereign Cloud (Germany has no commercial region).
 const OTHER_PARTITION = /(govcloud|중국|china|주권|sovereign|^유럽\(독일\)$|^(cn|us-gov|eusc)-)/i;
+const GEOGRAPHY = /(미국|유럽|아시아|태평양|캐나다|남아메리카|남미|중동|아프리카|이스라엘|멕시코|일본|한국|인도|호주|북미|\bus\b|europe|asia|america)/i;
 const COMMERCIAL_WORD = /(상업용|상용|commercial)/i;
 const REGION_CODE = /^[a-z]{2}-[a-z]+-\d$/;
 
@@ -76,7 +77,10 @@ export function canonicalizeRegions(raw) {
     // "all (commercial) regions" counts as all regions. A phrase that names another partition
     // ('모든 AWS GovCloud(미국) 리전', '중국 전체 리전') counts only if it also says commercial
     // ('모든 상업용 및 AWS GovCloud(미국) 리전').
-    if (ALL_PHRASE.test(p) && (!OTHER_PARTITION.test(p) || COMMERCIAL_WORD.test(p))) { all = true; continue; }
+    // A geographic subset ('미국 전체 리전', '유럽 전체 리전') is not all regions; it falls through
+    // and is dropped rather than guessed. GovCloud(미국) is a partition name, not a geography.
+    if (ALL_PHRASE.test(p) && (!OTHER_PARTITION.test(p) || COMMERCIAL_WORD.test(p))
+        && !GEOGRAPHY.test(p.replace(/govcloud\s*\([^)]*\)/gi, ''))) { all = true; continue; }
     if (OTHER_PARTITION.test(p)) { otherPartition = true; dropped.push(p); continue; }
     const city = p.match(/\(([^)]+)\)$/)?.[1];
     if (city && BY_CITY.has(city)) { kept.push(BY_CITY.get(city)); continue; }
