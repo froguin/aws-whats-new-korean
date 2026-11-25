@@ -76,8 +76,14 @@ export function matchServiceCode(service, codes) {
   return hits.length === 1 ? hits[0] : null;
 }
 
+// Product names the model uses whose SSM code differs and cannot be matched by spelling.
+// AWS Quick grew out of QuickSight and is still listed as 'quicksight'.
+const SERVICE_ALIASES = { quick: 'quicksight', 'aws-quick': 'quicksight', 'amazon-quick': 'quicksight' };
+
 async function resolveRegionIds(raw) {
-  const { service, regions } = parseServiceHint(raw);
+  const parsed = parseServiceHint(raw);
+  const { regions } = parsed;
+  const service = SERVICE_ALIASES[parsed.service] || parsed.service;
   if (regions.length) return { ids: regions, via: 'region codes in hint' };
   let ids = await getServiceRegions(service);
   if (ids.length) return { ids, via: service };
